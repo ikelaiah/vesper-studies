@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Light Flow Study No.1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: rgb(8, 8, 20);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: rgb(8, 8, 20);
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.54), rgba(0, 0, 0, 0.16) 42%, rgba(0, 0, 0, 0.04)),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.32));
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    button {
+      flex: 0 0 auto;
+      min-width: 88px;
+      height: 38px;
+      padding: 0 15px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.9);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.24);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.74);
+      outline-offset: 3px;
+    }
+
+    .masthead {
+      position: fixed;
+      top: clamp(20px, 4vh, 44px);
+      right: clamp(22px, 5vw, 64px);
+      z-index: 2;
+      text-align: right;
+      pointer-events: none;
+      font-family: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.72);
+      line-height: 1;
+    }
+
+    .masthead .masthead-rule {
+      display: block;
+      width: 64px;
+      height: 1px;
+      margin: 0 0 10px auto;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .masthead-title {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 68px);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .masthead-title .word-light {
+      font-weight: 500;
+    }
+
+    .masthead-title .word-flow {
+      font-style: italic;
+      font-weight: 600;
+      color: #e6c46a;
+      background: linear-gradient(180deg, #f3d680 0%, #c89a3a 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      padding: 0 0.04em;
+    }
+
+    .masthead-sub {
+      display: block;
+      margin-top: 6px;
+      font-size: clamp(13px, 1.3vw, 17px);
+      font-weight: 500;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .masthead-sub .no {
+      display: inline-block;
+      letter-spacing: 0.04em;
+      margin-right: 0.35em;
+      text-transform: none;
+      font-style: italic;
+      font-weight: 600;
+      font-size: 1.08em;
+      letter-spacing: 0;
+    }
+
+    .masthead-sub .no .o {
+      display: inline-block;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.78);
+      padding-bottom: 1px;
+      line-height: 1;
+    }
+
+    .story-panel {
+      position: fixed;
+      left: clamp(18px, 4vw, 56px);
+      bottom: clamp(96px, 14vh, 132px);
+      z-index: 2;
+      width: min(520px, calc(100vw - 36px));
+      pointer-events: none;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.62);
+    }
+
+    .chapter-kicker {
+      margin: 0 0 8px;
+      color: rgba(255, 255, 255, 0.60);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .story-panel h1 {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.96);
+      font-size: clamp(24px, 3.6vw, 42px);
+      line-height: 1.05;
+      font-weight: 780;
+      letter-spacing: -0.005em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .story-panel p {
+      margin: 10px 0 0;
+      max-width: 38ch;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: clamp(13px, 1.2vw, 15px);
+      line-height: 1.55;
+      letter-spacing: 0;
+      transition: opacity 520ms ease;
+    }
+
+    .story-panel p.is-fading {
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .chapter-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 26px;
+      pointer-events: auto;
+    }
+
+    .chapter-dots {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 96px;
+      height: 38px;
+      padding: 0 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(8, 10, 16, 0.34);
+      backdrop-filter: blur(14px);
+    }
+
+    .chapter-dot {
+      min-width: 0;
+      width: 10px;
+      height: 10px;
+      padding: 0;
+      border-radius: 50%;
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .chapter-dot[aria-current="true"] {
+      width: 26px;
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(14px, 3vh, 28px);
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: min(calc(100vw - 24px), 920px);
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(10, 12, 18, 0.66);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+      user-select: none;
+    }
+
+    .slider-control {
+      display: grid;
+      grid-template-columns: auto minmax(100px, 170px) 44px;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      margin-left: 2px;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .slider-control input {
+      width: 100%;
+      accent-color: rgba(150, 205, 255, 0.95);
+      cursor: pointer;
+    }
+
+    .slider-control output {
+      display: inline-flex;
+      justify-content: flex-end;
+      min-width: 44px;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    @media (max-width: 760px) {
+      body::before {
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.64), rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.52));
+      }
+
+      .story-panel {
+        left: 16px;
+        right: 16px;
+        bottom: 130px;
+        width: auto;
+      }
+
+      .story-panel h1 {
+        font-size: clamp(26px, 7.4vw, 40px);
+      }
+
+      .masthead {
+        top: 14px;
+        right: 16px;
+      }
+
+      .masthead-title {
+        font-size: clamp(20px, 6vw, 28px);
+      }
+
+      .masthead-sub {
+        font-size: 11px;
+        letter-spacing: 0.24em;
+      }
+
+      .masthead .masthead-rule {
+        width: 44px;
+        margin-bottom: 6px;
+      }
+
+      .story-panel p {
+        max-width: 34ch;
+        margin-top: 12px;
+        font-size: 14px;
+        line-height: 1.42;
+      }
+
+      .chapter-actions {
+        margin-top: 16px;
+        gap: 8px;
+      }
+
+      .chapter-actions button {
+        min-width: 70px;
+        height: 34px;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+
+      .chapter-dots {
+        min-width: 82px;
+        height: 34px;
+        gap: 6px;
+      }
+
+      .chapter-dot {
+        width: 8px;
+        height: 8px;
+      }
+
+      .chapter-dot[aria-current="true"] {
+        width: 20px;
+      }
+
+      .controls {
+        justify-content: center;
+        flex-wrap: wrap;
+        border-radius: 24px;
+        padding: 10px;
+      }
+
+      button {
+        min-width: 78px;
+        height: 36px;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+
+      .slider-control {
+        grid-template-columns: auto minmax(130px, 1fr) 42px;
+        width: 100%;
+        padding: 0 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="flowCanvas" aria-label="Interactive flow field particle book"></canvas>
+
+  <header class="masthead" aria-label="Exhibition title">
+    <span class="masthead-rule" aria-hidden="true"></span>
+    <h2 class="masthead-title"><span class="word-light">Light</span> <span class="word-flow">Flow</span> Study</h2>
+    <span class="masthead-sub"><span class="no">N<span class="o">o</span>.</span>01 &mdash; A Field Study</span>
+  </header>
+
+  <section class="story-panel" aria-live="polite">
+    <p class="chapter-kicker" id="chapterKicker">Introduction</p>
+    <h1 id="chapterTitle">First Light</h1>
+    <p id="chapterText">Before the current has a name, it learns to drift. Hold the page and the field bends toward your hand.</p>
+    <div class="chapter-actions" aria-label="Chapter navigation">
+      <button id="prevChapterBtn" type="button">Prev</button>
+      <div class="chapter-dots" id="chapterDots" aria-label="Chapters"></div>
+      <button id="nextChapterBtn" type="button">Next</button>
+    </div>
+  </section>
+
+  <div class="controls" aria-label="Flow field controls">
+    <button id="paletteBtn" type="button" aria-label="Cycle palette">Cosmic</button>
+    <button id="clearBtn" type="button">Clear</button>
+    <button id="pauseBtn" type="button">Pause</button>
+    <label class="slider-control">
+      <span>Density</span>
+      <input id="densityInput" type="range" min="100" max="1200" step="100" value="600">
+      <output id="densityOutput">600</output>
+    </label>
+    <label class="slider-control">
+      <span>Curlyness</span>
+      <input id="curlInput" type="range" min="40" max="220" step="10" value="100">
+      <output id="curlOutput">1.0x</output>
+    </label>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("flowCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const chapterKicker = document.getElementById("chapterKicker");
+      const chapterTitle = document.getElementById("chapterTitle");
+      const chapterText = document.getElementById("chapterText");
+      const chapterDots = document.getElementById("chapterDots");
+      const prevChapterBtn = document.getElementById("prevChapterBtn");
+      const nextChapterBtn = document.getElementById("nextChapterBtn");
+      const paletteBtn = document.getElementById("paletteBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const densityInput = document.getElementById("densityInput");
+      const densityOutput = document.getElementById("densityOutput");
+      const curlInput = document.getElementById("curlInput");
+      const curlOutput = document.getElementById("curlOutput");
+
+      const palettes = [
+        { name: "Cosmic", hMin: 220, hRange: 130, sat: "80%", lit: "68%", bg: [8, 8, 20] },
+        { name: "Ocean", hMin: 175, hRange: 60, sat: "88%", lit: "62%", bg: [4, 10, 22] },
+        { name: "Aurora", hMin: 100, hRange: 200, sat: "80%", lit: "62%", bg: [4, 10, 14] },
+        { name: "Fire", hMin: 0, hRange: 58, sat: "92%", lit: "60%", bg: [18, 5, 3] },
+        { name: "Forest", hMin: 85, hRange: 75, sat: "75%", lit: "55%", bg: [4, 12, 6] }
+      ];
+
+      const chapters = [
+        {
+          kicker: "Introduction",
+          title: "First Light",
+          text: "Before the current has a name, it learns to drift. Hold the page and the field bends toward your hand.",
+          palette: "Cosmic",
+          density: 400,
+          curliness: 0.6,
+          force: 0.16,
+          fade: 0.042,
+          flow: introFlow
+        },
+        {
+          kicker: "Chapter 1",
+          title: "The River",
+          text: "The first path becomes legible: long ribbons slide across the dark, carrying small sparks in a steady direction.",
+          palette: "Ocean",
+          density: 650,
+          curliness: 0.9,
+          force: 0.20,
+          fade: 0.036,
+          flow: riverFlow
+        },
+        {
+          kicker: "Chapter 2",
+          title: "The Turning",
+          text: "A hidden center appears. The page stops crossing from edge to edge and starts remembering how to orbit.",
+          palette: "Aurora",
+          density: 760,
+          curliness: 1.3,
+          force: 0.23,
+          fade: 0.034,
+          flow: orbitFlow
+        },
+        {
+          kicker: "Chapter 3",
+          title: "Bright Weather",
+          text: "The quiet pattern breaks open. Currents fold through one another until the field feels alive with pressure.",
+          palette: "Fire",
+          density: 1000,
+          curliness: 1.9,
+          force: 0.28,
+          fade: 0.040,
+          flow: stormFlow
+        },
+        {
+          kicker: "Ending",
+          title: "Soft Return",
+          text: "The motion loosens its grip. What was scattered gathers into a slower shape, then leaves the page breathing.",
+          palette: "Forest",
+          density: 520,
+          curliness: 0.8,
+          force: 0.17,
+          fade: 0.046,
+          centerPull: 0.012,
+          flow: endingFlow
+        }
+      ];
+
+      let particles = [];
+      let currentChapterIndex = 0;
+      let particleCount = chapters[0].density;
+      let paletteIndex = getPaletteIndex(chapters[0].palette);
+      let hueShift = 0;
+      let frame = 0;
+      let animationId = 0;
+      let paused = false;
+      let dpr = 1;
+      let curliness = chapters[0].curliness;
+
+      const pointer = {
+        active: false,
+        x: 0,
+        y: 0,
+        pressedAt: 0
+      };
+
+      const burst = {
+        active: false,
+        x: 0,
+        y: 0,
+        startedAt: 0,
+        duration: 420,
+        strength: 0,
+        radius: 0,
+        hue: 0
+      };
+
+      const BURST_MAX_HOLD_MS = 1600;
+
+      function currentChapter() {
+        return chapters[currentChapterIndex];
+      }
+
+      function currentPalette() {
+        return palettes[paletteIndex];
+      }
+
+      function getPaletteIndex(name) {
+        const foundIndex = palettes.findIndex((palette) => palette.name === name);
+        return foundIndex >= 0 ? foundIndex : 0;
+      }
+
+      function bgCss(alpha = 1) {
+        const [r, g, b] = currentPalette().bg;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function syncPageBackground() {
+        const [r, g, b] = currentPalette().bg;
+        const color = `rgb(${r}, ${g}, ${b})`;
+        document.documentElement.style.background = color;
+        document.body.style.background = color;
+      }
+
+      function resizeCanvas() {
+        const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2.5));
+        const width = Math.max(1, Math.floor(canvas.clientWidth * nextDpr));
+        const height = Math.max(1, Math.floor(canvas.clientHeight * nextDpr));
+
+        if (canvas.width === width && canvas.height === height && dpr === nextDpr) {
+          return;
+        }
+
+        dpr = nextDpr;
+        canvas.width = width;
+        canvas.height = height;
+        fillBackground();
+        initParticles();
+      }
+
+      function fillBackground() {
+        syncPageBackground();
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss(1);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      function rand(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function makeParticle(randomAge = true) {
+        const life = Math.floor(rand(90, 300));
+        return {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: rand(-0.35, 0.35) * dpr,
+          vy: rand(-0.35, 0.35) * dpr,
+          age: randomAge ? Math.floor(Math.random() * life) : 0,
+          life,
+          hOff: Math.random() * currentPalette().hRange,
+          size: rand(0.4, 1.9) * dpr
+        };
+      }
+
+      function initParticles() {
+        particles = Array.from({ length: particleCount }, () => makeParticle(true));
+      }
+
+      function respawnParticle(p) {
+        const next = makeParticle(false);
+        p.x = next.x;
+        p.y = next.y;
+        p.vx = next.vx;
+        p.vy = next.vy;
+        p.age = next.age;
+        p.life = next.life;
+        p.hOff = next.hOff;
+        p.size = next.size;
+      }
+
+      function introFlow(x, y, t) {
+        return (
+          Math.sin(x * 0.0018 + t * 0.55) * Math.cos(y * 0.0025 + t * 0.48) * 0.55 +
+          Math.sin(x * 0.0038 + y * 0.0033 + t * 0.88) * 0.30 +
+          Math.cos(x * 0.001 - y * 0.0038 + t * 0.38) * 0.15
+        ) * Math.PI * 4;
+      }
+
+      function riverFlow(x, y, t) {
+        const band = Math.sin(y * 0.0062 + t * 0.78) * 0.42;
+        const cross = Math.sin((x + y) * 0.0017 - t * 0.36) * 0.22;
+        const tide = Math.cos(y * 0.0014 + t * 0.24) * 0.14;
+        return (band + cross + tide) * Math.PI;
+      }
+
+      function orbitFlow(x, y, t) {
+        const cx = canvas.width * (0.52 + Math.sin(t * 0.22) * 0.07);
+        const cy = canvas.height * (0.50 + Math.cos(t * 0.19) * 0.08);
+        const orbit = Math.atan2(y - cy, x - cx) + Math.PI / 2;
+        const ripple = Math.sin((x + y) * 0.0023 + t * 0.76) * 0.76;
+        return orbit + ripple;
+      }
+
+      function stormFlow(x, y, t) {
+        const cx = canvas.width * 0.5;
+        const cy = canvas.height * 0.52;
+        const twist = Math.atan2(y - cy, x - cx) * 0.55;
+        const pressure =
+          Math.sin(x * 0.0042 + t * 1.18) * Math.cos(y * 0.0035 - t * 0.92) * 0.62 +
+          Math.sin((x - y) * 0.0052 + t * 1.46) * 0.34 +
+          Math.cos((x + y) * 0.0028 - t * 0.72) * 0.26;
+        return pressure * Math.PI * 3.4 + twist;
+      }
+
+      function endingFlow(x, y, t) {
+        const cx = canvas.width * (0.5 + Math.sin(t * 0.13) * 0.04);
+        const cy = canvas.height * (0.5 + Math.cos(t * 0.11) * 0.04);
+        const dx = x - cx;
+        const dy = y - cy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const orbit = Math.atan2(dy, dx) + Math.PI / 2;
+        const breathe = Math.sin(distance * 0.006 - t * 0.58) * 0.45;
+        const settle = Math.atan2(cy - y, cx - x) * 0.24;
+        return orbit + breathe + settle;
+      }
+
+      function flowAngle(x, y, t) {
+        return currentChapter().flow(x, y, t) * curliness;
+      }
+
+      function updatePointerFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+      }
+
+      function updateParticle(p, t) {
+        const chapter = currentChapter();
+        const angle = flowAngle(p.x, p.y, t);
+        const force = chapter.force * dpr;
+
+        p.vx += Math.cos(angle) * force;
+        p.vy += Math.sin(angle) * force;
+        p.vx *= 0.94;
+        p.vy *= 0.94;
+
+        if (chapter.centerPull) {
+          const cx = canvas.width * 0.5;
+          const cy = canvas.height * 0.5;
+          const dx = cx - p.x;
+          const dy = cy - p.y;
+          const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          const pull = chapter.centerPull * dpr * Math.min(1, dist / (260 * dpr));
+          p.vx += (dx / dist) * pull;
+          p.vy += (dy / dist) * pull;
+        }
+
+        if (pointer.active) {
+          const dx = pointer.x - p.x;
+          const dy = pointer.y - p.y;
+          const distSq = dx * dx + dy * dy;
+          const radius = 150 * dpr;
+
+          if (distSq > 0.0001 && distSq < radius * radius) {
+            const dist = Math.sqrt(distSq);
+            const strength = ((radius - dist) / radius) * 3.8 * dpr;
+            p.vx += (dx / dist) * strength;
+            p.vy += (dy / dist) * strength;
+          }
+        }
+
+        p.x += p.vx;
+        p.y += p.vy;
+        p.age += 1;
+
+        if (
+          p.age >= p.life ||
+          p.x < -24 * dpr ||
+          p.x > canvas.width + 24 * dpr ||
+          p.y < -24 * dpr ||
+          p.y > canvas.height + 24 * dpr
+        ) {
+          respawnParticle(p);
+        }
+      }
+
+      function drawParticle(p) {
+        const palette = currentPalette();
+        const alpha = Math.sin((p.age / p.life) * Math.PI) * 0.78;
+        const hue = (palette.hMin + p.hOff + hueShift) % 360;
+
+        ctx.fillStyle = `hsla(${hue}, ${palette.sat}, ${palette.lit}, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawPointerGlow() {
+        if (!pointer.active) {
+          return;
+        }
+
+        const palette = currentPalette();
+        const radius = 150 * dpr;
+        const hue = (palette.hMin + hueShift) % 360;
+        const glow = ctx.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius);
+
+        glow.addColorStop(0, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.014)`);
+        glow.addColorStop(0.6, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.005)`);
+        glow.addColorStop(1, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0)`);
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(pointer.x, pointer.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        const hold = performance.now() - pointer.pressedAt;
+        const charge = Math.min(1, hold / BURST_MAX_HOLD_MS);
+        if (charge > 0.02) {
+          const ringRadius = (18 + charge * 64) * dpr;
+          const palette2 = currentPalette();
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.strokeStyle = `hsla(${hue}, ${palette2.sat}, ${palette2.lit}, ${0.18 + charge * 0.38})`;
+          ctx.lineWidth = (1 + charge * 1.6) * dpr;
+          ctx.beginPath();
+          ctx.arc(pointer.x, pointer.y, ringRadius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      function drawBurstFlash() {
+        if (!burst.active) return;
+        const elapsed = performance.now() - burst.startedAt;
+        const progress = elapsed / burst.duration;
+        if (progress >= 1) {
+          burst.active = false;
+          return;
+        }
+
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const radius = burst.radius * 0.42 * (0.45 + eased * 0.65);
+        const alpha = (1 - progress) * 0.18;
+        const palette = currentPalette();
+        const flash = ctx.createRadialGradient(burst.x, burst.y, 0, burst.x, burst.y, radius);
+
+        flash.addColorStop(0, `hsla(${burst.hue}, ${palette.sat}, 70%, ${alpha * 0.7})`);
+        flash.addColorStop(0.5, `hsla(${burst.hue}, ${palette.sat}, ${palette.lit}, ${alpha * 0.18})`);
+        flash.addColorStop(1, `hsla(${burst.hue}, ${palette.sat}, ${palette.lit}, 0)`);
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = flash;
+        ctx.beginPath();
+        ctx.arc(burst.x, burst.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = `hsla(${burst.hue}, ${palette.sat}, 72%, ${(1 - progress) * 0.35})`;
+        ctx.lineWidth = (0.6 + (1 - progress) * 1.2) * dpr;
+        ctx.beginPath();
+        ctx.arc(burst.x, burst.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawFrame() {
+        const t = frame / 60;
+
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss(currentChapter().fade);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.globalCompositeOperation = "lighter";
+        for (const particle of particles) {
+          updateParticle(particle, t);
+          drawParticle(particle);
+        }
+
+        drawPointerGlow();
+        drawBurstFlash();
+
+        hueShift = (hueShift + 0.13) % 360;
+        frame += 1;
+        animationId = requestAnimationFrame(drawFrame);
+      }
+
+      function startAnimation() {
+        if (!animationId) {
+          animationId = requestAnimationFrame(drawFrame);
+        }
+      }
+
+      function stopAnimation() {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = 0;
+        }
+      }
+
+      function setPaused(nextPaused) {
+        paused = nextPaused;
+        pauseBtn.textContent = paused ? "Resume" : "Pause";
+        if (paused) {
+          stopAnimation();
+        } else {
+          startAnimation();
+        }
+      }
+
+      function updateControlLabels() {
+        paletteBtn.textContent = currentPalette().name;
+        densityInput.value = String(particleCount);
+        densityOutput.textContent = String(particleCount);
+        curlInput.value = String(Math.round(curliness * 100));
+        curlOutput.textContent = `${curliness.toFixed(1)}x`;
+      }
+
+      const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#%&*+=/\\<>?:;~";
+      const scrambleTokens = new WeakMap();
+
+      function scrambleTo(el, finalText, durationMs = 700) {
+        const token = (scrambleTokens.get(el) || 0) + 1;
+        scrambleTokens.set(el, token);
+        const start = performance.now();
+        const startText = el.textContent || "";
+        const maxLen = Math.max(startText.length, finalText.length);
+
+        function frame(now) {
+          if (scrambleTokens.get(el) !== token) return;
+          const progress = Math.min(1, (now - start) / durationMs);
+          let out = "";
+          for (let i = 0; i < finalText.length; i += 1) {
+            const target = finalText[i];
+            const revealAt = (i / maxLen) * 0.7;
+            if (progress >= revealAt + 0.18 || target === " ") {
+              out += target;
+            } else if (progress >= revealAt) {
+              const t = (progress - revealAt) / 0.18;
+              out += Math.random() < t ? target : SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            } else {
+              out += SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            }
+          }
+          el.textContent = out;
+          if (progress < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            el.textContent = finalText;
+          }
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      let isFirstStoryRender = true;
+
+      function updateStory() {
+        const chapter = currentChapter();
+
+        if (isFirstStoryRender) {
+          chapterKicker.textContent = chapter.kicker;
+          chapterTitle.textContent = chapter.title;
+          chapterText.textContent = chapter.text;
+          isFirstStoryRender = false;
+        } else {
+          scrambleTo(chapterKicker, chapter.kicker, 520);
+          scrambleTo(chapterTitle, chapter.title, 760);
+
+          chapterText.classList.add("is-fading");
+          window.setTimeout(() => {
+            chapterText.textContent = chapter.text;
+            chapterText.classList.remove("is-fading");
+          }, 200);
+        }
+
+        const dots = chapterDots.querySelectorAll(".chapter-dot");
+        dots.forEach((dot, index) => {
+          const active = index === currentChapterIndex;
+          dot.setAttribute("aria-current", active ? "true" : "false");
+          dot.setAttribute("aria-label", `${active ? "Current chapter" : "Go to chapter"}: ${chapters[index].kicker}`);
+        });
+      }
+
+      function setChapter(index) {
+        currentChapterIndex = (index + chapters.length) % chapters.length;
+        const chapter = currentChapter();
+
+        paletteIndex = getPaletteIndex(chapter.palette);
+        particleCount = chapter.density;
+        curliness = chapter.curliness;
+        hueShift = 0;
+        updateControlLabels();
+        updateStory();
+        fillBackground();
+        initParticles();
+      }
+
+      function clearAndReset() {
+        fillBackground();
+        initParticles();
+      }
+
+      function buildChapterDots() {
+        chapterDots.innerHTML = "";
+        chapters.forEach((chapter, index) => {
+          const dot = document.createElement("button");
+          dot.type = "button";
+          dot.className = "chapter-dot";
+          dot.addEventListener("click", () => setChapter(index));
+          chapterDots.appendChild(dot);
+        });
+      }
+
+      prevChapterBtn.addEventListener("click", () => {
+        setChapter(currentChapterIndex - 1);
+      });
+
+      nextChapterBtn.addEventListener("click", () => {
+        setChapter(currentChapterIndex + 1);
+      });
+
+      paletteBtn.addEventListener("click", () => {
+        paletteIndex = (paletteIndex + 1) % palettes.length;
+        hueShift = 0;
+        for (const particle of particles) {
+          particle.hOff = Math.random() * currentPalette().hRange;
+        }
+        updateControlLabels();
+        fillBackground();
+      });
+
+      clearBtn.addEventListener("click", clearAndReset);
+
+      pauseBtn.addEventListener("click", () => {
+        setPaused(!paused);
+      });
+
+      densityInput.addEventListener("input", () => {
+        particleCount = Number(densityInput.value);
+        densityOutput.textContent = String(particleCount);
+        clearAndReset();
+      });
+
+      curlInput.addEventListener("input", () => {
+        curliness = Number(curlInput.value) / 100;
+        curlOutput.textContent = `${curliness.toFixed(1)}x`;
+      });
+
+      function triggerBurst() {
+        if (!pointer.pressedAt) return;
+        const hold = Math.min(BURST_MAX_HOLD_MS, performance.now() - pointer.pressedAt);
+        const charge = hold / BURST_MAX_HOLD_MS;
+        if (charge < 0.05) return;
+
+        burst.active = true;
+        burst.x = pointer.x;
+        burst.y = pointer.y;
+        burst.startedAt = performance.now();
+        burst.strength = (4 + charge * 22) * dpr;
+        burst.radius = (140 + charge * 220) * dpr;
+        burst.hue = (currentPalette().hMin + hueShift) % 360;
+
+        for (const p of particles) {
+          const dx = p.x - burst.x;
+          const dy = p.y - burst.y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq < burst.radius * burst.radius && distSq > 0.0001) {
+            const dist = Math.sqrt(distSq);
+            const falloff = 1 - dist / burst.radius;
+            const impulse = burst.strength * falloff;
+            p.vx += (dx / dist) * impulse;
+            p.vy += (dy / dist) * impulse;
+          }
+        }
+      }
+
+      canvas.addEventListener("mousedown", (event) => {
+        pointer.active = true;
+        pointer.pressedAt = performance.now();
+        updatePointerFromEvent(event);
+      });
+
+      canvas.addEventListener("mousemove", (event) => {
+        if (pointer.active) {
+          updatePointerFromEvent(event);
+        }
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (pointer.active) {
+          triggerBurst();
+        }
+        pointer.active = false;
+        pointer.pressedAt = 0;
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        if (pointer.active) {
+          triggerBurst();
+        }
+        pointer.active = false;
+        pointer.pressedAt = 0;
+      });
+
+      canvas.addEventListener("touchstart", (event) => {
+        pointer.active = true;
+        pointer.pressedAt = performance.now();
+        updatePointerFromEvent(event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      canvas.addEventListener("touchmove", (event) => {
+        if (pointer.active && event.touches.length > 0) {
+          updatePointerFromEvent(event.touches[0]);
+        }
+        event.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener("touchend", () => {
+        if (pointer.active) {
+          triggerBurst();
+        }
+        pointer.active = false;
+        pointer.pressedAt = 0;
+      });
+
+      window.addEventListener("resize", resizeCanvas);
+
+      window.addEventListener("keydown", (event) => {
+        const tag = document.activeElement ? document.activeElement.tagName : "";
+        if (tag === "INPUT" || tag === "BUTTON") {
+          return;
+        }
+
+        if (event.key === "ArrowRight") {
+          setChapter(currentChapterIndex + 1);
+        } else if (event.key === "ArrowLeft") {
+          setChapter(currentChapterIndex - 1);
+        } else if (event.key === " ") {
+          setPaused(!paused);
+          event.preventDefault();
+        }
+      });
+
+      buildChapterDots();
+      updateControlLabels();
+      updateStory();
+      resizeCanvas();
+      fillBackground();
+      initParticles();
+      startAnimation();
+    })();
+  </script>
+</body>
+</html>
