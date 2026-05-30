@@ -1,0 +1,1386 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vesper &middot; No.03 &mdash; Sand Study</title>
+  <meta name="description" content="Sand Study No.03 — an interactive granular flow by Ikelaiah. Third in the Vesper Studies series.">
+  <meta property="og:title" content="Vesper · No.03 — Sand Study">
+  <meta property="og:description" content="An interactive granular flow. Third in the Vesper Studies series.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gb-bg0:       #282828;
+      --gb-bg1:       #3c3836;
+      --gb-bg2:       #504945;
+      --gb-bg3:       #665c54;
+      --gb-fg:        #ebdbb2;
+      --gb-fg-dim:    #d5c4a1;
+      --gb-gray:      #a89984;
+      --gb-yellow:    #fabd2f;
+      --gb-orange:    #fe8019;
+      --gb-red:       #fb4934;
+      --gb-aqua:      #8ec07c;
+
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: rgb(8, 8, 20);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: rgb(8, 8, 20);
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.54), rgba(0, 0, 0, 0.16) 42%, rgba(0, 0, 0, 0.04)),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.32));
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* Overlay canvas sits on top of the trail canvas and gets cleared every
+       frame so live elements (strings, bob heads) don't accumulate into the
+       trail buffer. Pointer events pass through to the trail canvas below.
+       Lower z-index than masthead/story/controls so the UI stays on top. */
+    #overlayCanvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    button {
+      flex: 0 0 auto;
+      min-width: 88px;
+      height: 38px;
+      padding: 0 15px;
+      border: 1px solid var(--gb-bg3);
+      border-radius: 999px;
+      background: var(--gb-bg1);
+      color: var(--gb-fg);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    button:hover {
+      background: var(--gb-bg2);
+      border-color: var(--gb-yellow);
+      color: var(--gb-yellow);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+      background: var(--gb-bg3);
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--gb-yellow);
+      outline-offset: 3px;
+    }
+
+    .masthead {
+      position: fixed;
+      top: clamp(20px, 4vh, 44px);
+      right: clamp(22px, 5vw, 64px);
+      z-index: 2;
+      text-align: right;
+      pointer-events: none;
+      font-family: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.72);
+      line-height: 1;
+    }
+
+    .masthead .masthead-rule {
+      display: block;
+      width: 64px;
+      height: 1px;
+      margin: 0 0 10px auto;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .masthead-title {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 68px);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .masthead-title .word-sand {
+      font-weight: 500;
+    }
+
+    .masthead-title .word-study {
+      font-style: italic;
+      font-weight: 600;
+      color: #e6c46a;
+      background: linear-gradient(180deg, #f3d680 0%, #c89a3a 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      padding: 0 0.04em;
+    }
+
+    .masthead-sub {
+      display: block;
+      margin-top: 6px;
+      font-size: clamp(13px, 1.3vw, 17px);
+      font-weight: 500;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .masthead-sub .no {
+      display: inline-block;
+      letter-spacing: 0.04em;
+      margin-right: 0.35em;
+      text-transform: none;
+      font-style: italic;
+      font-weight: 600;
+      font-size: 1.08em;
+      letter-spacing: 0;
+    }
+
+    .masthead-sub .no .o {
+      display: inline-block;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.78);
+      padding-bottom: 1px;
+      line-height: 1;
+    }
+
+    .story-panel {
+      position: fixed;
+      left: clamp(18px, 4vw, 56px);
+      bottom: clamp(96px, 14vh, 132px);
+      z-index: 2;
+      width: min(520px, calc(100vw - 36px));
+      pointer-events: none;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.62);
+    }
+
+    .chapter-kicker {
+      margin: 0 0 8px;
+      color: var(--gb-orange);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .story-panel h1 {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.96);
+      font-size: clamp(24px, 3.6vw, 42px);
+      line-height: 1.05;
+      font-weight: 780;
+      letter-spacing: -0.005em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .story-panel p {
+      margin: 10px 0 0;
+      max-width: 38ch;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: clamp(13px, 1.2vw, 15px);
+      line-height: 1.55;
+      letter-spacing: 0;
+      transition: opacity 520ms ease;
+    }
+
+    .story-panel p.is-fading {
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .chapter-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 26px;
+      pointer-events: auto;
+    }
+
+    .chapter-dots {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 96px;
+      height: 38px;
+      padding: 0 8px;
+      border: 1px solid var(--gb-bg2);
+      border-radius: 999px;
+      background: rgba(40, 40, 40, 0.55);
+      backdrop-filter: blur(14px);
+    }
+
+    .chapter-dot {
+      min-width: 0;
+      width: 10px;
+      height: 10px;
+      padding: 0;
+      border-radius: 50%;
+      border-color: var(--gb-bg3);
+      background: var(--gb-gray);
+    }
+
+    .chapter-dot:hover {
+      background: var(--gb-fg-dim);
+      border-color: var(--gb-yellow);
+    }
+
+    .chapter-dot[aria-current="true"] {
+      width: 26px;
+      background: var(--gb-yellow);
+      border-color: var(--gb-orange);
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(14px, 3vh, 28px);
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: min(calc(100vw - 24px), 1120px);
+      padding: 10px 14px;
+      border: 1px solid var(--gb-bg2);
+      border-radius: 999px;
+      background: rgba(40, 40, 40, 0.72);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+      user-select: none;
+    }
+
+    .controls-secondary { display: contents; }
+    .tray-toggle { display: none; }
+
+    .slider-control {
+      display: grid;
+      grid-template-columns: auto minmax(80px, 130px) 46px;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 0 6px;
+      color: var(--gb-fg-dim);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .slider-control input {
+      width: 100%;
+      accent-color: var(--gb-yellow);
+      cursor: pointer;
+    }
+
+    .slider-control output {
+      display: inline-flex;
+      justify-content: flex-end;
+      width: 46px;
+      max-width: 46px;
+      overflow: hidden;
+      font-variant-numeric: tabular-nums;
+      color: var(--gb-yellow);
+    }
+
+    @media (max-width: 900px) {
+      body::before {
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.64), rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.52));
+      }
+
+      .story-panel {
+        left: 16px;
+        right: 16px;
+        bottom: 80px;
+        width: auto;
+      }
+
+      .story-panel h1 { font-size: clamp(22px, 6vw, 32px); }
+      .story-panel p { font-size: 13px; line-height: 1.45; }
+
+      .masthead { top: 14px; right: 16px; }
+      .masthead-title { font-size: clamp(20px, 6vw, 28px); }
+      .masthead-sub { font-size: 11px; letter-spacing: 0.24em; }
+      .masthead .masthead-rule { width: 44px; margin-bottom: 6px; }
+
+      .chapter-actions { margin-top: 16px; gap: 8px; }
+      .chapter-actions button {
+        min-width: 70px; height: 34px; padding: 0 10px; font-size: 12px;
+      }
+
+      .chapter-dots { min-width: 82px; height: 34px; gap: 6px; }
+      .chapter-dot { width: 8px; height: 8px; }
+      .chapter-dot[aria-current="true"] { width: 20px; }
+
+      .controls {
+        left: 12px; right: 12px;
+        width: auto; max-width: none;
+        bottom: 12px;
+        transform: none;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        border-radius: 999px;
+        padding: 8px 10px;
+        gap: 8px;
+      }
+
+      .tray-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        height: 38px;
+        padding: 0 14px;
+      }
+
+      .tray-toggle-icon {
+        font-size: 16px;
+        line-height: 1;
+        transition: transform 220ms ease;
+      }
+
+      .tray-toggle[aria-expanded="true"] .tray-toggle-icon {
+        transform: rotate(60deg);
+        color: var(--gb-yellow);
+      }
+
+      .controls-secondary {
+        display: flex;
+        position: fixed;
+        left: 12px; right: 12px;
+        bottom: 64px;
+        z-index: 3;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 14px 14px 16px;
+        border: 1px solid var(--gb-bg2);
+        border-radius: 20px;
+        background: rgba(40, 40, 40, 0.88);
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(16px);
+        transform: translateY(calc(100% + 80px));
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+      }
+
+      .controls-secondary.is-open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .controls-secondary > button { align-self: stretch; }
+
+      .controls-secondary .slider-control {
+        display: grid;
+        grid-template-columns: 80px 1fr 46px;
+        gap: 10px;
+        width: 100%;
+        padding: 4px 2px;
+        font-size: 13px;
+      }
+
+      button {
+        min-width: 78px;
+        height: 36px;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+
+      .controls-secondary > button { height: 40px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="sandCanvas" aria-label="Interactive sand field"></canvas>
+  <canvas id="overlayCanvas" aria-hidden="true"></canvas>
+
+  <header class="masthead" aria-label="Exhibition title">
+    <span class="masthead-rule" aria-hidden="true"></span>
+    <h2 class="masthead-title"><span class="word-sand">Sand</span> <span class="word-study">Study</span></h2>
+    <span class="masthead-sub"><span class="no">N<span class="o">o</span>.</span>03 &mdash; A Granular Flow</span>
+  </header>
+
+  <section class="story-panel" aria-live="polite">
+    <p class="chapter-kicker" id="chapterKicker">Introduction</p>
+    <h1 id="chapterTitle">First Snow</h1>
+    <p id="chapterText">Sand falls from the sky in a slow, even rain. Move your cursor to bend the stream; hold to build an invisible ridge that catches the grains.</p>
+    <div class="chapter-actions" aria-label="Chapter navigation">
+      <button id="prevChapterBtn" type="button">Prev</button>
+      <div class="chapter-dots" id="chapterDots" aria-label="Chapters"></div>
+      <button id="nextChapterBtn" type="button">Next</button>
+    </div>
+  </section>
+
+  <div class="controls" id="controls" aria-label="Sand controls">
+    <button id="trayToggleBtn" class="tray-toggle" type="button" aria-expanded="false" aria-controls="controlsSecondary" aria-label="Show settings">
+      <span class="tray-toggle-icon" aria-hidden="true">&#9881;</span>
+      <span class="tray-toggle-label">Settings</span>
+    </button>
+    <div class="controls-secondary" id="controlsSecondary">
+      <button id="paletteBtn" type="button" aria-label="Cycle palette">Cosmic</button>
+      <button id="clearBtn" type="button">Clear</button>
+      <button id="pauseBtn" type="button">Pause</button>
+      <label class="slider-control">
+        <span>Speed</span>
+        <input id="speedInput" type="range" min="20" max="220" step="5" value="100">
+        <output id="speedOutput">1.0x</output>
+      </label>
+      <label class="slider-control">
+        <span>Wind</span>
+        <input id="windInput" type="range" min="-100" max="100" step="5" value="0">
+        <output id="windOutput">0</output>
+      </label>
+      <label class="slider-control">
+        <span>Tail</span>
+        <input id="tailInput" type="range" min="30" max="200" step="5" value="100">
+        <output id="tailOutput">1.0x</output>
+      </label>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("sandCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      // Overlay canvas for live elements (strings, bob heads) that should
+      // not accumulate into the trail buffer. Cleared at the start of each
+      // frame. Uses alpha so the trail canvas shows through.
+      const overlay = document.getElementById("overlayCanvas");
+      const octx = overlay.getContext("2d", { alpha: true });
+      const chapterKicker = document.getElementById("chapterKicker");
+      const chapterTitle = document.getElementById("chapterTitle");
+      const chapterText = document.getElementById("chapterText");
+      const chapterDots = document.getElementById("chapterDots");
+      const prevChapterBtn = document.getElementById("prevChapterBtn");
+      const nextChapterBtn = document.getElementById("nextChapterBtn");
+      const paletteBtn = document.getElementById("paletteBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const speedInput = document.getElementById("speedInput");
+      const speedOutput = document.getElementById("speedOutput");
+      const windInput = document.getElementById("windInput");
+      const windOutput = document.getElementById("windOutput");
+      const tailInput = document.getElementById("tailInput");
+      const tailOutput = document.getElementById("tailOutput");
+      const trayToggleBtn = document.getElementById("trayToggleBtn");
+      const controlsSecondary = document.getElementById("controlsSecondary");
+
+      // Shared palettes with No.01 for series cohesion
+      const palettes = [
+        { name: "Cosmic", hMin: 220, hRange: 130, sat: "80%", lit: "68%", bg: [8, 8, 20] },
+        { name: "Ocean",  hMin: 175, hRange: 60,  sat: "88%", lit: "62%", bg: [4, 10, 22] },
+        { name: "Aurora", hMin: 100, hRange: 200, sat: "80%", lit: "62%", bg: [4, 10, 14] },
+        { name: "Fire",   hMin: 0,   hRange: 58,  sat: "92%", lit: "60%", bg: [18, 5, 3] },
+        { name: "Forest", hMin: 85,  hRange: 75,  sat: "75%", lit: "55%", bg: [4, 12, 6] }
+      ];
+
+      // A granular flow. Sand grains spawn at the top of the canvas, fall
+      // under gravity, and pile up where they land — the pile is stored in
+      // a 1D heightmap (one entry per column) so collision is O(1) per
+      // grain. The cursor bends the falling stream like a finger held in
+      // water; holding LMB sculpts the heightmap directly (a digital zen
+      // garden); tapping fires a brief upward fountain of grains.
+      //
+      // Each chapter tunes the spawn pattern, gravity, wind, and aesthetic.
+      const chapters = [
+        {
+          kicker: "Introduction",
+          title: "First Snow",
+          text: "Sand falls from the sky in a slow, even rain. Move your cursor to bend the stream; hold to build an invisible ridge that catches the grains.",
+          palette: "Cosmic",
+          fade: 0.006,        // very slow fade: piles persist for a long time
+          spawnRate: 380,     // grains per second
+          gravity: 220,       // px/s^2 downward
+          windBase: 0,        // baseline horizontal acceleration
+          windJitter: 14,     // per-grain random lateral jitter
+          spawnSpread: 0.85,  // width fraction of canvas the grains spawn across
+          spawnYOffset: -12,  // px above the top edge
+          spawnVelY: 8,       // px/s initial downward velocity
+          funnelStrength: 90, // how strongly the cursor bends the stream
+          seed: 1,
+          mode: "rain"
+        },
+        {
+          kicker: "Chapter 1",
+          title: "Hourglass",
+          text: "A narrow column of sand pours through the centre, fast and steep. Piles climb quickly. Sweep the cursor to spill the stream sideways.",
+          palette: "Ocean",
+          fade: 0.010,
+          spawnRate: 620,
+          gravity: 520,
+          windBase: 0,
+          windJitter: 6,
+          spawnSpread: 0.06,
+          spawnYOffset: -12,
+          spawnVelY: 60,
+          funnelStrength: 180,
+          seed: 2,
+          mode: "rain"
+        },
+        {
+          kicker: "Chapter 2",
+          title: "Drift Dunes",
+          text: "A steady wind blows the falling sand sideways. Dunes accumulate downwind; ridges you draw stretch into long crescents.",
+          palette: "Aurora",
+          fade: 0.005,
+          spawnRate: 520,
+          gravity: 280,
+          windBase: 85,
+          windJitter: 24,
+          spawnSpread: 1.05,  // spawn slightly off-screen upwind
+          spawnYOffset: -14,
+          spawnVelY: 14,
+          funnelStrength: 70,
+          seed: 3,
+          mode: "rain"
+        },
+        {
+          kicker: "Chapter 3",
+          title: "Updraft",
+          text: "Gravity inverts in the upper half. Sand thrown into the top rises; sand at the bottom falls. The boundary churns like surf.",
+          palette: "Fire",
+          fade: 0.014,
+          spawnRate: 700,
+          gravity: 340,
+          windBase: 0,
+          windJitter: 18,
+          spawnSpread: 0.75,
+          spawnYOffset: -14,
+          spawnVelY: 18,
+          funnelStrength: 110,
+          seed: 4,
+          mode: "updraft"
+        },
+        {
+          kicker: "Ending",
+          title: "The Last Grain",
+          text: "The flow slows to almost nothing. A single grain at a time. Watch where it lands. Watch the pile remember every gesture you have made.",
+          palette: "Forest",
+          fade: 0.003,
+          spawnRate: 28,
+          gravity: 160,
+          windBase: 0,
+          windJitter: 4,
+          spawnSpread: 0.55,
+          spawnYOffset: -10,
+          spawnVelY: 6,
+          funnelStrength: 60,
+          seed: 5,
+          mode: "rain"
+        }
+      ];
+
+      let currentChapterIndex = 0;
+      let paletteIndex = getPaletteIndex(chapters[0].palette);
+      let hueShift = 0;
+      let frame = 0;
+      let internalT = 0;
+      let lastFrameTime = 0;
+      let animationId = 0;
+      let paused = false;
+      let dpr = 1;
+
+      let speedMultiplier = 1.0;
+      let windMultiplier = 0.0;  // -1..+1 user offset, added to chapter wind
+      let tailMultiplier = 1.0;
+
+      // Sand grain pool. Grains have position, velocity, hue offset, alive
+      // flag. Inactive grains form a free list (their indices in `dead`).
+      const MAX_GRAINS = 6000;
+      // Hard cap on grains that can be airborne at once. The pool itself is
+      // sized larger as headroom for sudden bursts, but we refuse to spawn
+      // once liveCount hits this so the pool can never fully drain — every
+      // tap that *does* succeed always has slots available. The cap is well
+      // below MAX_GRAINS so fountain taps still have room even at peak rain.
+      const MAX_LIVE_GRAINS = 4500;
+      // Maximum lifetime in seconds. Any grain that has not landed or left
+      // the canvas by this point is force-killed and recycled. Belt-and-
+      // braces in case a grain gets stuck in a gravity-inversion eddy or
+      // any other degenerate path; under normal rain a grain lives a couple
+      // of seconds at most.
+      const GRAIN_MAX_LIFE_SEC = 8.0;
+      const grains = new Array(MAX_GRAINS);
+      for (let i = 0; i < MAX_GRAINS; i += 1) {
+        grains[i] = { x: 0, y: 0, vx: 0, vy: 0, hueOff: 0, bornAt: 0, alive: false };
+      }
+      let liveCount = 0;
+      // Free list of dead-grain indices. Allocation = pop, deactivation = push.
+      const dead = new Array(MAX_GRAINS);
+      let deadCount = MAX_GRAINS;
+      for (let i = 0; i < MAX_GRAINS; i += 1) dead[i] = MAX_GRAINS - 1 - i;
+
+      // Heightmap: one entry per column, value = pile height above the
+      // bottom of the canvas in pixels. The cell width COL_PX controls
+      // resolution; smaller = sharper piles, larger = chunkier and faster.
+      const COL_PX = 4;
+      let heightMap = new Float32Array(1);
+      let heightCols = 1;
+      // Pending spawn accumulator: spawnRate may produce fractional grains
+      // per frame, accumulate and emit whole ones.
+      let spawnAccum = 0;
+      // Internal stable clock used for hue cycling.
+      let renderClock = 0;
+
+      // Seeded RNG so chapter layouts are stable across re-init.
+      function mulberry32(seed) {
+        let s = seed >>> 0;
+        return function () {
+          s = (s + 0x6D2B79F5) >>> 0;
+          let t = s;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      // Pointer state. `pressedX`/`pressedY` are recorded at mousedown so we
+      // can distinguish a tap (no movement, short hold) from a sculpt.
+      const pointer = {
+        active: false,
+        over: false,    // true once the cursor has ever touched the canvas
+        x: 0,
+        y: 0,
+        prevX: 0,
+        prevY: 0,
+        pressedAt: 0,
+        pressedX: 0,
+        pressedY: 0,
+        moved: 0  // total distance moved while held, in px
+      };
+
+      // Fountain flash: a brief radial bloom drawn on the overlay where a
+      // tap fired, fading over `duration` ms.
+      const fountain = {
+        active: false,
+        x: 0,
+        y: 0,
+        startedAt: 0,
+        duration: 420,
+        hue: 0
+      };
+
+      const TAP_MAX_HOLD_MS = 200;
+      const TAP_MAX_MOVE_PX = 8;
+      const FOUNTAIN_GRAINS = 90;
+
+      function currentChapter() { return chapters[currentChapterIndex]; }
+      function currentPalette() { return palettes[paletteIndex]; }
+
+      function getPaletteIndex(name) {
+        const i = palettes.findIndex((p) => p.name === name);
+        return i >= 0 ? i : 0;
+      }
+
+      function bgCss(alpha = 1) {
+        const [r, g, b] = currentPalette().bg;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function syncPageBackground() {
+        const [r, g, b] = currentPalette().bg;
+        const color = `rgb(${r}, ${g}, ${b})`;
+        document.documentElement.style.background = color;
+        document.body.style.background = color;
+      }
+
+      function resizeCanvas() {
+        const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2.5));
+        const width = Math.max(1, Math.floor(canvas.clientWidth * nextDpr));
+        const height = Math.max(1, Math.floor(canvas.clientHeight * nextDpr));
+
+        if (canvas.width === width && canvas.height === height && dpr === nextDpr) return;
+
+        dpr = nextDpr;
+        canvas.width = width;
+        canvas.height = height;
+        overlay.width = width;
+        overlay.height = height;
+        fillBackground();
+        // Heightmap resolution depends on canvas width.
+        heightCols = Math.max(1, Math.floor(width / (COL_PX * dpr)));
+        heightMap = new Float32Array(heightCols);
+        // Resetting all live grains avoids stranded grains floating mid-air.
+        clearGrains();
+      }
+
+      function fillBackground() {
+        syncPageBackground();
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss(1);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      function loadChapter() {
+        internalT = 0;
+        spawnAccum = 0;
+        clearGrains();
+        if (heightMap) heightMap.fill(0);
+      }
+
+      function clearGrains() {
+        for (let i = 0; i < MAX_GRAINS; i += 1) {
+          if (grains[i].alive) {
+            grains[i].alive = false;
+            dead[deadCount] = i;
+            deadCount += 1;
+            if (deadCount > MAX_GRAINS) deadCount = MAX_GRAINS;
+          }
+        }
+        liveCount = 0;
+      }
+
+      function spawnGrain(x, y, vx, vy) {
+        if (deadCount === 0 || liveCount >= MAX_LIVE_GRAINS) return -1;
+        deadCount -= 1;
+        const idx = dead[deadCount];
+        const g = grains[idx];
+        g.x = x;
+        g.y = y;
+        g.vx = vx;
+        g.vy = vy;
+        const palette = currentPalette();
+        g.hueOff = (Math.random() - 0.5) * palette.hRange * 0.4;
+        g.bornAt = renderClock;
+        g.alive = true;
+        liveCount += 1;
+        return idx;
+      }
+
+      function killGrain(idx) {
+        const g = grains[idx];
+        if (!g.alive) return;
+        g.alive = false;
+        dead[deadCount] = idx;
+        deadCount += 1;
+        liveCount -= 1;
+      }
+
+      // Heightmap helpers -------------------------------------------------
+
+      function colAtX(x) {
+        const c = Math.floor(x / (canvas.width / heightCols));
+        if (c < 0) return 0;
+        if (c >= heightCols) return heightCols - 1;
+        return c;
+      }
+
+      // Surface y at column c (top of the pile at that column). y measured
+      // from canvas top so smaller y = higher pile.
+      function surfaceY(c) {
+        return canvas.height - heightMap[c];
+      }
+
+      // Raise pile by amount at column c. Cheap angle-of-repose enforcement:
+      // if neighbouring columns are significantly lower, spill into them.
+      function depositAt(c, amount) {
+        if (c < 0 || c >= heightCols) return;
+        heightMap[c] += amount;
+        // Angle-of-repose: when a column gets too tall vs neighbours, send
+        // some of the excess sideways. Only a single sweep per deposit.
+        // MAX_STEP is the maximum allowed height difference between two
+        // adjacent columns; anything beyond spills.
+        const MAX_STEP = 4 * dpr;
+        if (c > 0) {
+          const dh = heightMap[c] - heightMap[c - 1];
+          if (dh > MAX_STEP) {
+            const spill = (dh - MAX_STEP) * 0.5;
+            heightMap[c] -= spill;
+            heightMap[c - 1] += spill;
+          }
+        }
+        if (c < heightCols - 1) {
+          const dh = heightMap[c] - heightMap[c + 1];
+          if (dh > MAX_STEP) {
+            const spill = (dh - MAX_STEP) * 0.5;
+            heightMap[c] -= spill;
+            heightMap[c + 1] += spill;
+          }
+        }
+      }
+
+      function drawPointerGlow() {
+        if (!pointer.active) return;
+
+        const palette = currentPalette();
+        const radius = 110 * dpr;
+        const hue = (palette.hMin + hueShift) % 360;
+        const glow = octx.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius);
+
+        glow.addColorStop(0, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.22)`);
+        glow.addColorStop(0.5, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.08)`);
+        glow.addColorStop(1, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0)`);
+
+        octx.save();
+        octx.globalCompositeOperation = "lighter";
+        octx.fillStyle = glow;
+        octx.beginPath();
+        octx.arc(pointer.x, pointer.y, radius, 0, Math.PI * 2);
+        octx.fill();
+        octx.restore();
+
+        // Ridge marker: a small horizontal bar under the cursor showing
+        // where sculpting is being applied. Only visible during sculpt
+        // (i.e. once the user has moved enough that it isn't a tap).
+        if (pointer.moved > TAP_MAX_MOVE_PX) {
+          const w = 60 * dpr;
+          octx.save();
+          octx.globalCompositeOperation = "lighter";
+          octx.strokeStyle = `hsla(${hue}, ${palette.sat}, 78%, 0.55)`;
+          octx.lineWidth = 2 * dpr;
+          octx.lineCap = "round";
+          octx.beginPath();
+          octx.moveTo(pointer.x - w * 0.5, pointer.y);
+          octx.lineTo(pointer.x + w * 0.5, pointer.y);
+          octx.stroke();
+          octx.restore();
+        }
+      }
+
+      function drawFountainFlash() {
+        if (!fountain.active) return;
+        const elapsed = performance.now() - fountain.startedAt;
+        const progress = elapsed / fountain.duration;
+        if (progress >= 1) {
+          fountain.active = false;
+          return;
+        }
+        const eased = 1 - Math.pow(1 - progress, 2);
+        const radius = (16 + eased * 80) * dpr;
+        const alpha = (1 - progress) * 0.45;
+        const palette = currentPalette();
+
+        const flash = octx.createRadialGradient(fountain.x, fountain.y, 0, fountain.x, fountain.y, radius);
+        flash.addColorStop(0, `hsla(${fountain.hue}, ${palette.sat}, 72%, ${alpha * 0.8})`);
+        flash.addColorStop(0.5, `hsla(${fountain.hue}, ${palette.sat}, ${palette.lit}, ${alpha * 0.25})`);
+        flash.addColorStop(1, `hsla(${fountain.hue}, ${palette.sat}, ${palette.lit}, 0)`);
+
+        octx.save();
+        octx.globalCompositeOperation = "lighter";
+        octx.fillStyle = flash;
+        octx.beginPath();
+        octx.arc(fountain.x, fountain.y, radius, 0, Math.PI * 2);
+        octx.fill();
+        octx.restore();
+      }
+
+      function drawFrame(now) {
+        if (!lastFrameTime) lastFrameTime = now;
+        const dtMs = Math.min(48, now - lastFrameTime);
+        lastFrameTime = now;
+
+        const ch = currentChapter();
+        const dtSec = (dtMs / 1000) * speedMultiplier;
+        internalT += dtSec;
+        renderClock += dtSec;
+
+        // Trail fade — slow, since piles are meant to persist visually.
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss(ch.fade / tailMultiplier);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Clear the overlay at the *start* of the frame so subsequent draws
+        // into octx (in-flight grains, sculpt feedback, glow, fountain flash)
+        // are all visible. Anything drawn after this is fresh for the frame.
+        octx.clearRect(0, 0, overlay.width, overlay.height);
+
+        // Spawn new grains. spawnRate is grains/second.
+        spawnAccum += ch.spawnRate * dtSec;
+        const w = canvas.width;
+        const spawnCount = Math.floor(spawnAccum);
+        spawnAccum -= spawnCount;
+        const spawnCx = w * 0.5;
+        const spawnHalf = w * ch.spawnSpread * 0.5;
+        const wind = ch.windBase + windMultiplier * 120;
+        for (let i = 0; i < spawnCount; i += 1) {
+          // Spawn x: triangular distribution gives a denser centre with
+          // softer edges, which reads as a stream rather than a flat sheet.
+          const r = (Math.random() + Math.random()) * 0.5 - 0.5;
+          const sx = spawnCx + r * spawnHalf * 2;
+          const sy = ch.spawnYOffset * dpr;
+          // Funnel: bias velocity toward cursor x if cursor has ever been
+          // over the canvas. Before any movement, leave the stream alone.
+          let vxBias = 0;
+          if (pointer.over) {
+            const dx = pointer.x - sx;
+            vxBias = Math.sign(dx) * Math.min(Math.abs(dx) * 0.6, ch.funnelStrength) * dpr;
+          }
+          const vx = (Math.random() - 0.5) * ch.windJitter + wind + vxBias * 0.02;
+          const vy = ch.spawnVelY + Math.random() * 6;
+          spawnGrain(sx, sy, vx, vy);
+        }
+
+        // Sculpt: while held *and moved past tap threshold*, deposit sand
+        // directly into the heightmap at the cursor column. The amount is
+        // proportional to how far the cursor moved this frame so quick
+        // sweeps lay a thin line, slow drags build a thick ridge.
+        if (pointer.active && pointer.moved > TAP_MAX_MOVE_PX) {
+          const dx = pointer.x - pointer.prevX;
+          const dy = pointer.y - pointer.prevY;
+          const segLen = Math.sqrt(dx * dx + dy * dy);
+          // Walk along the cursor's path and deposit at each pixel column.
+          const steps = Math.max(1, Math.ceil(segLen / (COL_PX * dpr)));
+          for (let i = 0; i < steps; i += 1) {
+            const t = (i + 1) / steps;
+            const sx = pointer.prevX + dx * t;
+            const sy = pointer.prevY + dy * t;
+            const c = colAtX(sx);
+            // Deposit up to the cursor's y position (raise the surface
+            // until it meets the cursor). This way drawing across the
+            // canvas literally paints the surface shape.
+            const targetH = canvas.height - sy;
+            if (targetH > heightMap[c]) {
+              const room = targetH - heightMap[c];
+              depositAt(c, Math.min(room, 8 * dpr));
+            }
+          }
+          // Also splat a few sand-coloured pixels at the cursor on the
+          // overlay for immediate visual feedback. Overlay clears every
+          // frame, so the splat vanishes the instant the user stops
+          // sculpting — no lingering ghost cursor on the trail buffer.
+          const palette = currentPalette();
+          octx.globalCompositeOperation = "lighter";
+          octx.fillStyle = `hsla(${(palette.hMin + hueShift) % 360}, ${palette.sat}, ${palette.lit}, 0.9)`;
+          for (let i = 0; i < 4; i += 1) {
+            const jx = pointer.x + (Math.random() - 0.5) * 6 * dpr;
+            const jy = pointer.y + (Math.random() - 0.5) * 6 * dpr;
+            octx.fillRect(jx, jy, 1.4 * dpr, 1.4 * dpr);
+          }
+        }
+
+        // Integrate grains. Render in two places:
+        //   - In-flight grains → overlay canvas (cleared each frame), so
+        //     they don't draw vertical streaks into the trail buffer as
+        //     they fall down the same x repeatedly.
+        //   - Landed grains → trail buffer (persists, slowly fades), so
+        //     each landing leaves a coloured mark that builds up the
+        //     visible pile.
+        const palette = currentPalette();
+        const baseHue = palette.hMin;
+        const updraftMode = ch.mode === "updraft";
+        const halfH = canvas.height * 0.5;
+
+        ctx.globalCompositeOperation = "lighter";
+        octx.globalCompositeOperation = "lighter";
+
+        for (let i = 0; i < MAX_GRAINS; i += 1) {
+          const g = grains[i];
+          if (!g.alive) continue;
+
+          // Gravity (with "updraft" mode reversing it in the upper half).
+          let gy = ch.gravity * dpr;
+          if (updraftMode && g.y < halfH) gy = -ch.gravity * 0.7 * dpr;
+          g.vx += (wind * 0.4 + (Math.random() - 0.5) * ch.windJitter * 0.6) * dtSec;
+          g.vy += gy * dtSec;
+          // Mild air drag so grains don't accelerate forever.
+          g.vx *= 0.995;
+          g.vy *= 0.995;
+
+          g.x += g.vx * dtSec;
+          g.y += g.vy * dtSec;
+
+          // Off-screen left/right: kill (recycled by spawner).
+          if (g.x < -8 * dpr || g.x > w + 8 * dpr) {
+            killGrain(i);
+            continue;
+          }
+          // Lifetime fallback: any grain still alive after this many seconds
+          // is force-killed. Catches grains stuck in updraft eddies or any
+          // other degenerate orbit so they don't permanently consume slots.
+          if (renderClock - g.bornAt > GRAIN_MAX_LIFE_SEC) {
+            killGrain(i);
+            continue;
+          }
+          // Hit the bottom or the pile surface?
+          const c = colAtX(g.x);
+          const surface = surfaceY(c);
+          if (g.y >= surface && g.vy >= 0) {
+            // Land. Deposit into the pile and bake a coloured pixel into
+            // the trail buffer at the landing spot — this is what gives
+            // the pile its body and history.
+            depositAt(c, 1.6 * dpr);
+            const hue = (baseHue + (renderClock * 14 + g.hueOff) % palette.hRange + 360) % 360;
+            ctx.fillStyle = `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.85)`;
+            ctx.fillRect(g.x, surface - 1, 1.6 * dpr, 1.6 * dpr);
+            killGrain(i);
+            continue;
+          }
+
+          // Draw the grain mid-flight on the overlay, not the trail buffer.
+          const hue = (baseHue + (renderClock * 14 + g.hueOff) % palette.hRange + 360) % 360;
+          octx.fillStyle = `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.85)`;
+          octx.fillRect(g.x, g.y, 1.8 * dpr, 1.8 * dpr);
+        }
+
+        // Pile body replenishment: each frame fill the area below the pile
+        // surface at a low alpha that exactly cancels the trail fade. Steady
+        // state is constant brightness regardless of fade rate, so the pile
+        // remains visible as long as the heightmap has entries — even if
+        // sand stops landing on it. Without this the pile would slowly
+        // disappear while the heightmap (and collision) silently persisted.
+        const fadeRate = ch.fade / tailMultiplier;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = `hsla(${baseHue}, ${palette.sat}, 28%, ${fadeRate * 5.0})`;
+        const cellW = canvas.width / heightCols;
+        for (let c = 0; c < heightCols; c += 1) {
+          if (heightMap[c] < 0.5) continue;
+          const x = c * cellW;
+          const y = surfaceY(c);
+          ctx.fillRect(x, y, cellW + 1, canvas.height - y);
+        }
+
+        // Surface highlight: a thin line along the crest so the pile reads
+        // as a continuous shape rather than a row of soft blobs.
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = `hsla(${baseHue}, ${palette.sat}, 70%, ${Math.min(0.55, fadeRate * 14)})`;
+        ctx.lineWidth = 0.8 * dpr;
+        ctx.beginPath();
+        let started = false;
+        for (let c = 0; c < heightCols; c += 1) {
+          const x = (c + 0.5) * cellW;
+          const y = surfaceY(c);
+          if (heightMap[c] < 0.5) {
+            if (started) { ctx.stroke(); ctx.beginPath(); started = false; }
+            continue;
+          }
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        if (started) ctx.stroke();
+
+        // Overlay was cleared at the start of the frame; just add the
+        // cursor glow and fountain flash on top of any grains already drawn.
+        drawPointerGlow();
+        drawFountainFlash();
+
+        // Update pointer.prev for next frame's sculpt-segment calculation.
+        pointer.prevX = pointer.x;
+        pointer.prevY = pointer.y;
+
+        hueShift = (hueShift + 0.08) % 360;
+        frame += 1;
+        animationId = requestAnimationFrame(drawFrame);
+      }
+
+      function startAnimation() {
+        if (!animationId) {
+          lastFrameTime = 0;
+          animationId = requestAnimationFrame(drawFrame);
+        }
+      }
+
+      function stopAnimation() {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = 0;
+        }
+      }
+
+      function setPaused(next) {
+        paused = next;
+        pauseBtn.textContent = paused ? "Resume" : "Pause";
+        if (paused) stopAnimation(); else startAnimation();
+      }
+
+      function updateControlLabels() {
+        paletteBtn.textContent = currentPalette().name;
+        speedInput.value = String(Math.round(speedMultiplier * 100));
+        speedOutput.textContent = `${speedMultiplier.toFixed(1)}x`;
+        windInput.value = String(Math.round(windMultiplier * 100));
+        windOutput.textContent = windMultiplier === 0 ? "0" : (windMultiplier > 0 ? `+${(windMultiplier).toFixed(1)}` : `${windMultiplier.toFixed(1)}`);
+        tailInput.value = String(Math.round(tailMultiplier * 100));
+        tailOutput.textContent = `${tailMultiplier.toFixed(1)}x`;
+      }
+
+      const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#%&*+=/\\<>?:;~";
+      const scrambleTokens = new WeakMap();
+
+      function scrambleTo(el, finalText, durationMs = 700) {
+        const token = (scrambleTokens.get(el) || 0) + 1;
+        scrambleTokens.set(el, token);
+        const start = performance.now();
+        const startText = el.textContent || "";
+        const maxLen = Math.max(startText.length, finalText.length);
+
+        function f(now) {
+          if (scrambleTokens.get(el) !== token) return;
+          const progress = Math.min(1, (now - start) / durationMs);
+          let out = "";
+          for (let i = 0; i < finalText.length; i += 1) {
+            const target = finalText[i];
+            const revealAt = (i / maxLen) * 0.7;
+            if (progress >= revealAt + 0.18 || target === " ") {
+              out += target;
+            } else if (progress >= revealAt) {
+              const tt = (progress - revealAt) / 0.18;
+              out += Math.random() < tt ? target : SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            } else {
+              out += SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            }
+          }
+          el.textContent = out;
+          if (progress < 1) requestAnimationFrame(f);
+          else el.textContent = finalText;
+        }
+
+        requestAnimationFrame(f);
+      }
+
+      let isFirstStoryRender = true;
+
+      function updateStory() {
+        const chapter = currentChapter();
+
+        if (isFirstStoryRender) {
+          chapterKicker.textContent = chapter.kicker;
+          chapterTitle.textContent = chapter.title;
+          chapterText.textContent = chapter.text;
+          isFirstStoryRender = false;
+        } else {
+          scrambleTo(chapterKicker, chapter.kicker, 520);
+          scrambleTo(chapterTitle, chapter.title, 760);
+          chapterText.classList.add("is-fading");
+          window.setTimeout(() => {
+            chapterText.textContent = chapter.text;
+            chapterText.classList.remove("is-fading");
+          }, 200);
+        }
+
+        const dots = chapterDots.querySelectorAll(".chapter-dot");
+        dots.forEach((dot, index) => {
+          const active = index === currentChapterIndex;
+          dot.setAttribute("aria-current", active ? "true" : "false");
+          dot.setAttribute("aria-label", `${active ? "Current chapter" : "Go to chapter"}: ${chapters[index].kicker}`);
+        });
+      }
+
+      function setChapter(index) {
+        currentChapterIndex = (index + chapters.length) % chapters.length;
+        const chapter = currentChapter();
+        paletteIndex = getPaletteIndex(chapter.palette);
+        hueShift = 0;
+        loadChapter();
+        updateControlLabels();
+        updateStory();
+        fillBackground();
+
+        if (controlsSecondary.classList.contains("is-open")) {
+          controlsSecondary.classList.remove("is-open");
+          trayToggleBtn.setAttribute("aria-expanded", "false");
+          trayToggleBtn.setAttribute("aria-label", "Show settings");
+        }
+      }
+
+      function clearAndReset() {
+        fillBackground();
+        loadChapter();
+      }
+
+      function buildChapterDots() {
+        chapterDots.innerHTML = "";
+        chapters.forEach((chapter, index) => {
+          const dot = document.createElement("button");
+          dot.type = "button";
+          dot.className = "chapter-dot";
+          dot.addEventListener("click", () => setChapter(index));
+          chapterDots.appendChild(dot);
+        });
+      }
+
+      prevChapterBtn.addEventListener("click", () => setChapter(currentChapterIndex - 1));
+      nextChapterBtn.addEventListener("click", () => setChapter(currentChapterIndex + 1));
+
+      paletteBtn.addEventListener("click", () => {
+        paletteIndex = (paletteIndex + 1) % palettes.length;
+        hueShift = 0;
+        updateControlLabels();
+        fillBackground();
+      });
+
+      clearBtn.addEventListener("click", clearAndReset);
+      pauseBtn.addEventListener("click", () => setPaused(!paused));
+
+      speedInput.addEventListener("input", () => {
+        speedMultiplier = Number(speedInput.value) / 100;
+        speedOutput.textContent = `${speedMultiplier.toFixed(1)}x`;
+      });
+
+      windInput.addEventListener("input", () => {
+        windMultiplier = Number(windInput.value) / 100;
+        windOutput.textContent = windMultiplier === 0 ? "0" : (windMultiplier > 0 ? `+${windMultiplier.toFixed(1)}` : `${windMultiplier.toFixed(1)}`);
+      });
+
+      tailInput.addEventListener("input", () => {
+        tailMultiplier = Number(tailInput.value) / 100;
+        tailOutput.textContent = `${tailMultiplier.toFixed(1)}x`;
+      });
+
+      trayToggleBtn.addEventListener("click", () => {
+        const isOpen = controlsSecondary.classList.toggle("is-open");
+        trayToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        trayToggleBtn.setAttribute("aria-label", isOpen ? "Hide settings" : "Show settings");
+      });
+
+      function updatePointerFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        pointer.over = true;
+      }
+
+      // Fountain: fired on a tap (short hold, no movement). Spawns a burst
+      // of grains at the cursor with upward+outward velocity. They then
+      // fall under gravity like everything else, eventually landing on the
+      // pile.
+      function triggerFountain() {
+        const palette = currentPalette();
+        fountain.active = true;
+        fountain.x = pointer.x;
+        fountain.y = pointer.y;
+        fountain.startedAt = performance.now();
+        fountain.hue = (palette.hMin + hueShift) % 360;
+
+        const ch = currentChapter();
+        const upBase = -260 * dpr;
+        for (let i = 0; i < FOUNTAIN_GRAINS; i += 1) {
+          const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.85;
+          const speed = (160 + Math.random() * 220) * dpr;
+          const vx = Math.cos(angle) * speed;
+          const vy = Math.sin(angle) * speed + upBase * 0.4;
+          spawnGrain(pointer.x, pointer.y, vx, vy);
+        }
+      }
+
+      function onPress(event, touch) {
+        pointer.active = true;
+        pointer.pressedAt = performance.now();
+        const src = touch || event;
+        const rect = canvas.getBoundingClientRect();
+        const x = (src.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (src.clientY - rect.top) * (canvas.height / rect.height);
+        pointer.x = x;
+        pointer.y = y;
+        pointer.prevX = x;
+        pointer.prevY = y;
+        pointer.pressedX = x;
+        pointer.pressedY = y;
+        pointer.moved = 0;
+      }
+
+      function onMove(event, touch) {
+        if (!pointer.active) {
+          // Still track for cursor funnel before any click.
+          updatePointerFromEvent(touch || event);
+          return;
+        }
+        const prevX = pointer.x;
+        const prevY = pointer.y;
+        updatePointerFromEvent(touch || event);
+        const dx = pointer.x - prevX;
+        const dy = pointer.y - prevY;
+        pointer.moved += Math.sqrt(dx * dx + dy * dy);
+      }
+
+      function onRelease() {
+        if (!pointer.active) return;
+        const hold = performance.now() - pointer.pressedAt;
+        const isTap = hold < TAP_MAX_HOLD_MS && pointer.moved < TAP_MAX_MOVE_PX;
+        if (isTap) triggerFountain();
+        pointer.active = false;
+        pointer.pressedAt = 0;
+        pointer.moved = 0;
+      }
+
+      canvas.addEventListener("mousedown", (event) => onPress(event));
+      window.addEventListener("mousemove", (event) => onMove(event));
+      window.addEventListener("mouseup", onRelease);
+      canvas.addEventListener("mouseleave", () => {
+        onRelease();
+        pointer.over = false;  // stop the funnel when cursor leaves the canvas
+      });
+      canvas.addEventListener("mouseenter", () => {
+        pointer.over = true;
+      });
+
+      canvas.addEventListener("touchstart", (event) => {
+        onPress(event, event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      canvas.addEventListener("touchmove", (event) => {
+        if (event.touches.length > 0) onMove(event, event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener("touchend", onRelease);
+
+      window.addEventListener("resize", resizeCanvas);
+
+      window.addEventListener("keydown", (event) => {
+        const tag = document.activeElement ? document.activeElement.tagName : "";
+        if (tag === "INPUT" || tag === "BUTTON") return;
+
+        if (event.key === "ArrowRight") setChapter(currentChapterIndex + 1);
+        else if (event.key === "ArrowLeft") setChapter(currentChapterIndex - 1);
+        else if (event.key === " ") {
+          setPaused(!paused);
+          event.preventDefault();
+        }
+      });
+
+      buildChapterDots();
+      updateControlLabels();
+      updateStory();
+      resizeCanvas();
+      fillBackground();
+      loadChapter();
+      startAnimation();
+    })();
+  </script>
+</body>
+</html>

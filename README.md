@@ -14,7 +14,8 @@ A series of small interactive generative pieces, each self-contained, each numbe
 | ----------------- | --------------------------------------------------------------------------------------------- | ----------- |
 | [No.01](./no-01/) | **Light Flow Study** — five chapters of flow-field motion with a charged-burst gesture        | Released    |
 | [No.02](./no-02/) | **Pendulum Study** — five chapters of a pendulum-bob field with a gather-and-scatter gesture  | Released    |
-| No.03             | —                                                                                             | Forthcoming |
+| [No.03](./no-03/) | **Sand Study** — five chapters of granular flow with a bend / sculpt / fountain gesture       | Released    |
+| No.04             | —                                                                                             | Forthcoming |
 
 Each study lives in its own folder with its own `README.md` and `index.html`. The root [index.html](./index.html) acts as a series foyer linking to each piece.
 
