@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] — Unreleased
+
+### Added
+
+- **No.02 — Pendulum Study**: an interactive field of pendulum bobs in five chapters (Slow Bloom, Lacework, Drift, Pendulum Wave, Settling), sharing the series palette set (Cosmic / Ocean / Aurora / Fire / Forest) and the masthead/story-panel/Settings-tray shell from No.01
+- Hundreds of independent simple pendulums per chapter, laid out on a jittered grid sized to the canvas; each bob has its own length, drawn with a length-keyed hue (short bobs at one end of the palette's hue band, long at the other) so the field visibly stratifies
+- Gather-and-scatter gesture for No.02: hold to tug nearby bobs toward the cursor (~0.9s to full charge); release to fire a radial impulse that kicks each bob's angular velocity by an amount capped at 1.8× its natural swing speed × proximity × charge, so bursts are violent but never spin the field into permanent rotation
+- Over-spin brake: cubic damping past ~2.8× the natural swing speed, so any bob that does cross into rotation bleeds energy within a second and the chapter's pendulum character reasserts
+- "Pendulum Wave" chapter assigns lengths in an arithmetic progression across the grid index, producing the classroom-physics travelling-wave illusion in 2D, visualised as a moving colour gradient
+- Faint strings drawn from bob toward pivot (only the lower 60%, suppressed when the bob is near rest) so the field reads as "a meadow of pendulums" rather than scattered scribbles
+- Two-canvas architecture: trail canvas accumulates streaks; overlay canvas (cleared every frame) carries strings, bob heads, pointer glow, charge ring, and burst flash so transient effects stay transient instead of baking permanent halos into the trail buffer
+- Speed and Damping sliders for No.02 (replace No.01's Density and Curlyness); Tail slider behaves the same as No.01
+
+### Changed
+
+- Root foyer (`index.html`) and series `README.md` now list No.02 as released; No.03 takes the forthcoming slot
+
 ## [0.2.0] — Unreleased
 
 ### Added
