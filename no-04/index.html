@@ -1,0 +1,1544 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vesper &middot; No.04 &mdash; Murmuration Study</title>
+  <meta name="description" content="Murmuration Study No.04 — an interactive flock of boids by Ikelaiah. Fourth in the Vesper Studies series.">
+  <meta property="og:title" content="Vesper · No.04 — Murmuration Study">
+  <meta property="og:description" content="An interactive flock of boids. Fourth in the Vesper Studies series.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gb-bg0:       #282828;
+      --gb-bg1:       #3c3836;
+      --gb-bg2:       #504945;
+      --gb-bg3:       #665c54;
+      --gb-fg:        #ebdbb2;
+      --gb-fg-dim:    #d5c4a1;
+      --gb-gray:      #a89984;
+      --gb-yellow:    #fabd2f;
+      --gb-orange:    #fe8019;
+      --gb-red:       #fb4934;
+      --gb-aqua:      #8ec07c;
+
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: rgb(8, 8, 20);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: rgb(8, 8, 20);
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.54), rgba(0, 0, 0, 0.16) 42%, rgba(0, 0, 0, 0.04)),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.32));
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* Overlay canvas sits on top of the trail canvas and gets cleared every
+       frame so live elements (strings, bob heads) don't accumulate into the
+       trail buffer. Pointer events pass through to the trail canvas below.
+       Lower z-index than masthead/story/controls so the UI stays on top. */
+    #overlayCanvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    button {
+      flex: 0 0 auto;
+      min-width: 88px;
+      height: 38px;
+      padding: 0 15px;
+      border: 1px solid var(--gb-bg3);
+      border-radius: 999px;
+      background: var(--gb-bg1);
+      color: var(--gb-fg);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    button:hover {
+      background: var(--gb-bg2);
+      border-color: var(--gb-yellow);
+      color: var(--gb-yellow);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+      background: var(--gb-bg3);
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--gb-yellow);
+      outline-offset: 3px;
+    }
+
+    .masthead {
+      position: fixed;
+      top: clamp(20px, 4vh, 44px);
+      right: clamp(22px, 5vw, 64px);
+      z-index: 2;
+      text-align: right;
+      pointer-events: none;
+      font-family: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.72);
+      line-height: 1;
+    }
+
+    .masthead .masthead-rule {
+      display: block;
+      width: 64px;
+      height: 1px;
+      margin: 0 0 10px auto;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .masthead-title {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 68px);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .masthead-title .word-murmuration {
+      font-weight: 500;
+    }
+
+    .masthead-title .word-study {
+      font-style: italic;
+      font-weight: 600;
+      color: #e6c46a;
+      background: linear-gradient(180deg, #f3d680 0%, #c89a3a 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      padding: 0 0.04em;
+    }
+
+    .masthead-sub {
+      display: block;
+      margin-top: 6px;
+      font-size: clamp(13px, 1.3vw, 17px);
+      font-weight: 500;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .masthead-sub .no {
+      display: inline-block;
+      letter-spacing: 0.04em;
+      margin-right: 0.35em;
+      text-transform: none;
+      font-style: italic;
+      font-weight: 600;
+      font-size: 1.08em;
+      letter-spacing: 0;
+    }
+
+    .masthead-sub .no .o {
+      display: inline-block;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.78);
+      padding-bottom: 1px;
+      line-height: 1;
+    }
+
+    .story-panel {
+      position: fixed;
+      left: clamp(18px, 4vw, 56px);
+      bottom: clamp(96px, 14vh, 132px);
+      z-index: 2;
+      width: min(520px, calc(100vw - 36px));
+      pointer-events: none;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.62);
+    }
+
+    .chapter-kicker {
+      margin: 0 0 8px;
+      color: var(--gb-orange);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .story-panel h1 {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.96);
+      font-size: clamp(24px, 3.6vw, 42px);
+      line-height: 1.05;
+      font-weight: 780;
+      letter-spacing: -0.005em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .story-panel p {
+      margin: 10px 0 0;
+      max-width: 38ch;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: clamp(13px, 1.2vw, 15px);
+      line-height: 1.55;
+      letter-spacing: 0;
+      transition: opacity 520ms ease;
+    }
+
+    .story-panel p.is-fading {
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .chapter-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 26px;
+      pointer-events: auto;
+    }
+
+    .chapter-dots {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 96px;
+      height: 38px;
+      padding: 0 8px;
+      border: 1px solid var(--gb-bg2);
+      border-radius: 999px;
+      background: rgba(40, 40, 40, 0.55);
+      backdrop-filter: blur(14px);
+    }
+
+    .chapter-dot {
+      min-width: 0;
+      width: 10px;
+      height: 10px;
+      padding: 0;
+      border-radius: 50%;
+      border-color: var(--gb-bg3);
+      background: var(--gb-gray);
+    }
+
+    .chapter-dot:hover {
+      background: var(--gb-fg-dim);
+      border-color: var(--gb-yellow);
+    }
+
+    .chapter-dot[aria-current="true"] {
+      width: 26px;
+      background: var(--gb-yellow);
+      border-color: var(--gb-orange);
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(14px, 3vh, 28px);
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: min(calc(100vw - 24px), 1120px);
+      padding: 10px 14px;
+      border: 1px solid var(--gb-bg2);
+      border-radius: 999px;
+      background: rgba(40, 40, 40, 0.72);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+      user-select: none;
+    }
+
+    .controls-secondary { display: contents; }
+    .tray-toggle { display: none; }
+
+    .slider-control {
+      display: grid;
+      grid-template-columns: auto minmax(80px, 130px) 46px;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 0 6px;
+      color: var(--gb-fg-dim);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .slider-control input {
+      width: 100%;
+      accent-color: var(--gb-yellow);
+      cursor: pointer;
+    }
+
+    .slider-control output {
+      display: inline-flex;
+      justify-content: flex-end;
+      width: 46px;
+      max-width: 46px;
+      overflow: hidden;
+      font-variant-numeric: tabular-nums;
+      color: var(--gb-yellow);
+    }
+
+    @media (max-width: 900px) {
+      body::before {
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.64), rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.52));
+      }
+
+      .story-panel {
+        left: 16px;
+        right: 16px;
+        bottom: 80px;
+        width: auto;
+      }
+
+      .story-panel h1 { font-size: clamp(22px, 6vw, 32px); }
+      .story-panel p { font-size: 13px; line-height: 1.45; }
+
+      .masthead { top: 14px; right: 16px; }
+      .masthead-title { font-size: clamp(20px, 6vw, 28px); }
+      .masthead-sub { font-size: 11px; letter-spacing: 0.24em; }
+      .masthead .masthead-rule { width: 44px; margin-bottom: 6px; }
+
+      .chapter-actions { margin-top: 16px; gap: 8px; }
+      .chapter-actions button {
+        min-width: 70px; height: 34px; padding: 0 10px; font-size: 12px;
+      }
+
+      .chapter-dots { min-width: 82px; height: 34px; gap: 6px; }
+      .chapter-dot { width: 8px; height: 8px; }
+      .chapter-dot[aria-current="true"] { width: 20px; }
+
+      .controls {
+        left: 12px; right: 12px;
+        width: auto; max-width: none;
+        bottom: 12px;
+        transform: none;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        border-radius: 999px;
+        padding: 8px 10px;
+        gap: 8px;
+      }
+
+      .tray-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        height: 38px;
+        padding: 0 14px;
+      }
+
+      .tray-toggle-icon {
+        font-size: 16px;
+        line-height: 1;
+        transition: transform 220ms ease;
+      }
+
+      .tray-toggle[aria-expanded="true"] .tray-toggle-icon {
+        transform: rotate(60deg);
+        color: var(--gb-yellow);
+      }
+
+      .controls-secondary {
+        display: flex;
+        position: fixed;
+        left: 12px; right: 12px;
+        bottom: 64px;
+        z-index: 3;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 14px 14px 16px;
+        border: 1px solid var(--gb-bg2);
+        border-radius: 20px;
+        background: rgba(40, 40, 40, 0.88);
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(16px);
+        transform: translateY(calc(100% + 80px));
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+      }
+
+      .controls-secondary.is-open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .controls-secondary > button { align-self: stretch; }
+
+      .controls-secondary .slider-control {
+        display: grid;
+        grid-template-columns: 80px 1fr 46px;
+        gap: 10px;
+        width: 100%;
+        padding: 4px 2px;
+        font-size: 13px;
+      }
+
+      button {
+        min-width: 78px;
+        height: 36px;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+
+      .controls-secondary > button { height: 40px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="flockCanvas" aria-label="Interactive flock of boids"></canvas>
+  <canvas id="overlayCanvas" aria-hidden="true"></canvas>
+
+  <header class="masthead" aria-label="Exhibition title">
+    <span class="masthead-rule" aria-hidden="true"></span>
+    <h2 class="masthead-title"><span class="word-murmuration">Murmuration</span> <span class="word-study">Study</span></h2>
+    <span class="masthead-sub"><span class="no">N<span class="o">o</span>.</span>04 &mdash; A Flock of Boids</span>
+  </header>
+
+  <section class="story-panel" aria-live="polite">
+    <p class="chapter-kicker" id="chapterKicker">Introduction</p>
+    <h1 id="chapterTitle">Dusk Flight</h1>
+    <p id="chapterText">A few hundred birds drift across the sky together, each watching only its nearest neighbours. Move your cursor to coax them closer; hold to scare them off; tap to plant a meeting point.</p>
+    <div class="chapter-actions" aria-label="Chapter navigation">
+      <button id="prevChapterBtn" type="button">Prev</button>
+      <div class="chapter-dots" id="chapterDots" aria-label="Chapters"></div>
+      <button id="nextChapterBtn" type="button">Next</button>
+    </div>
+  </section>
+
+  <div class="controls" id="controls" aria-label="Flock controls">
+    <button id="trayToggleBtn" class="tray-toggle" type="button" aria-expanded="false" aria-controls="controlsSecondary" aria-label="Show settings">
+      <span class="tray-toggle-icon" aria-hidden="true">&#9881;</span>
+      <span class="tray-toggle-label">Settings</span>
+    </button>
+    <div class="controls-secondary" id="controlsSecondary">
+      <button id="paletteBtn" type="button" aria-label="Cycle palette">Cosmic</button>
+      <button id="clearBtn" type="button">Clear</button>
+      <button id="pauseBtn" type="button">Pause</button>
+      <label class="slider-control">
+        <span>Speed</span>
+        <input id="speedInput" type="range" min="20" max="220" step="5" value="100">
+        <output id="speedOutput">1.0x</output>
+      </label>
+      <label class="slider-control">
+        <span>Cohesion</span>
+        <input id="cohesionInput" type="range" min="0" max="300" step="5" value="100">
+        <output id="cohesionOutput">1.0x</output>
+      </label>
+      <label class="slider-control">
+        <span>Tail</span>
+        <input id="tailInput" type="range" min="30" max="200" step="5" value="100">
+        <output id="tailOutput">1.0x</output>
+      </label>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("flockCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      // Overlay canvas for live elements (boid bodies, trails, cursor
+      // glow) that should not accumulate into the trail buffer. Cleared
+      // at the start of each frame. Uses alpha so the trail canvas
+      // shows through (the trail buffer here is used only for the very
+      // long fade memory of flock paths, not the current frame's birds).
+      const overlay = document.getElementById("overlayCanvas");
+      const octx = overlay.getContext("2d", { alpha: true });
+      const chapterKicker = document.getElementById("chapterKicker");
+      const chapterTitle = document.getElementById("chapterTitle");
+      const chapterText = document.getElementById("chapterText");
+      const chapterDots = document.getElementById("chapterDots");
+      const prevChapterBtn = document.getElementById("prevChapterBtn");
+      const nextChapterBtn = document.getElementById("nextChapterBtn");
+      const paletteBtn = document.getElementById("paletteBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const speedInput = document.getElementById("speedInput");
+      const speedOutput = document.getElementById("speedOutput");
+      const cohesionInput = document.getElementById("cohesionInput");
+      const cohesionOutput = document.getElementById("cohesionOutput");
+      const tailInput = document.getElementById("tailInput");
+      const tailOutput = document.getElementById("tailOutput");
+      const trayToggleBtn = document.getElementById("trayToggleBtn");
+      const controlsSecondary = document.getElementById("controlsSecondary");
+
+      // Shared palettes with No.01 for series cohesion
+      const palettes = [
+        { name: "Cosmic", hMin: 220, hRange: 130, sat: "80%", lit: "68%", bg: [8, 8, 20] },
+        { name: "Ocean",  hMin: 175, hRange: 60,  sat: "88%", lit: "62%", bg: [4, 10, 22] },
+        { name: "Aurora", hMin: 100, hRange: 200, sat: "80%", lit: "62%", bg: [4, 10, 14] },
+        { name: "Fire",   hMin: 0,   hRange: 58,  sat: "92%", lit: "60%", bg: [18, 5, 3] },
+        { name: "Forest", hMin: 85,  hRange: 75,  sat: "75%", lit: "55%", bg: [4, 12, 6] }
+      ];
+
+      // A flock of boids (Reynolds 1986). Each bird applies three steering
+      // forces relative to the birds within its perception radius:
+      //   - separation: push away from neighbours that are too close
+      //   - alignment:  match the average heading of nearby neighbours
+      //   - cohesion:   steer toward the centroid of nearby neighbours
+      // Plus a cursor influence: hover gently attracts, holding LMB scares
+      // and scatters, and a quick tap drops a temporary "seed" attractor.
+      //
+      // The canvas wraps toroidally (left↔right, top↔bottom) so the flock
+      // never bumps into walls.
+      //
+      // Neighbour lookup uses a spatial hash grid (cell size = perception
+      // radius) so the cost is O(N · k) where k is the average occupancy
+      // of a cell, instead of the naive O(N²).
+      const chapters = [
+        {
+          kicker: "Introduction",
+          title: "Dusk Flight",
+          text: "A few hundred birds drift across the sky together, each watching only its nearest neighbours. Move your cursor to coax them closer; hold to scare them off; tap to plant a meeting point.",
+          palette: "Cosmic",
+          fade: 0.040,
+          count: 300,
+          perceptRadius: 60,    // px — how far each bird sees
+          sepRadius: 18,        // px — closer than this and separation kicks in
+          maxSpeed: 130,        // px/s
+          minSpeed: 70,
+          wSeparation: 1.6,
+          wAlignment:  1.0,
+          wCohesion:   0.9,
+          wAttract:    0.45,    // hover attraction toward cursor
+          panicRadius: 110,     // hold-LMB repulsion takes effect within this
+          panicStrength: 4.5,
+          seed: 1
+        },
+        {
+          kicker: "Chapter 1",
+          title: "The Tight Pack",
+          text: "Birds want to stay close. They clump into a single moving knot, eddying around itself. Hold to break the knot open; release and they rejoin within seconds.",
+          palette: "Ocean",
+          fade: 0.050,
+          count: 260,
+          perceptRadius: 52,
+          sepRadius: 12,
+          maxSpeed: 140,
+          minSpeed: 80,
+          wSeparation: 1.1,
+          wAlignment:  1.3,
+          wCohesion:   1.9,
+          wAttract:    0.50,
+          panicRadius: 100,
+          panicStrength: 5.0,
+          seed: 2
+        },
+        {
+          kicker: "Chapter 2",
+          title: "The Wary Flock",
+          text: "The birds are jumpy. They scatter at the smallest disturbance, regather slowly. Holding the cursor near them ripples outward like wind through grass.",
+          palette: "Aurora",
+          fade: 0.045,
+          count: 290,
+          perceptRadius: 70,
+          sepRadius: 24,
+          maxSpeed: 160,
+          minSpeed: 90,
+          wSeparation: 2.4,
+          wAlignment:  0.9,
+          wCohesion:   0.7,
+          wAttract:    0.30,
+          panicRadius: 170,
+          panicStrength: 6.0,
+          seed: 3
+        },
+        {
+          kicker: "Chapter 3",
+          title: "Predator Garden",
+          text: "The cursor is both seed and storm. Birds swirl around your pointer wherever it rests; hold to scatter them violently; they re-form the orbit as soon as you let go.",
+          palette: "Fire",
+          fade: 0.038,
+          count: 320,
+          perceptRadius: 58,
+          sepRadius: 16,
+          maxSpeed: 170,
+          minSpeed: 100,
+          wSeparation: 1.4,
+          wAlignment:  1.1,
+          wCohesion:   1.0,
+          wAttract:    1.3,
+          panicRadius: 130,
+          panicStrength: 6.5,
+          seed: 4
+        },
+        {
+          kicker: "Ending",
+          title: "Last Light",
+          text: "The flock thins. The birds left behind move slowly, drifting in twos and threes. Tap once to give them a place to gather as the light leaves the page.",
+          palette: "Forest",
+          fade: 0.060,
+          count: 120,
+          perceptRadius: 80,
+          sepRadius: 22,
+          maxSpeed: 70,
+          minSpeed: 40,
+          wSeparation: 1.2,
+          wAlignment:  1.0,
+          wCohesion:   1.1,
+          wAttract:    0.55,
+          panicRadius: 90,
+          panicStrength: 3.0,
+          seed: 5
+        }
+      ];
+
+      let currentChapterIndex = 0;
+      let paletteIndex = getPaletteIndex(chapters[0].palette);
+      let hueShift = 0;
+      let frame = 0;
+      let internalT = 0;
+      let lastFrameTime = 0;
+      let animationId = 0;
+      let paused = false;
+      let dpr = 1;
+
+      let speedMultiplier = 1.0;
+      let cohesionMultiplier = 1.0;  // user-tweakable cohesion scale (0..3)
+      let tailMultiplier = 1.0;
+
+      // Boid arrays. We use parallel typed arrays rather than an array of
+      // objects so the hot loops are cache-friendly. `n` is the active
+      // count for the current chapter (may be less than MAX_BOIDS).
+      const MAX_BOIDS = 400;
+      const bx = new Float32Array(MAX_BOIDS);   // position x
+      const by = new Float32Array(MAX_BOIDS);   // position y
+      const bvx = new Float32Array(MAX_BOIDS);  // velocity x
+      const bvy = new Float32Array(MAX_BOIDS);  // velocity y
+      const bhue = new Float32Array(MAX_BOIDS); // per-bird hue offset
+      // Trail history: each bird keeps TWO ring buffers — one for each
+      // wing-tip's trail. Drawing two divergent trails per bird reads
+      // strongly as "wing-tip contrails", reinforcing the bird silhouette.
+      const TRAIL_LEN = 20;
+      // Layout: [bird_i][wing 0=left | 1=right][slot][x,y]
+      // Flat array index = (((i * 2) + wing) * TRAIL_LEN + slot) * 2  + xy
+      const trailXY = new Float32Array(MAX_BOIDS * 2 * TRAIL_LEN * 2);
+      const trailHead = new Uint16Array(MAX_BOIDS);
+
+      // Batched trail rendering routes per-segment draws into a small grid
+      // of (alpha × hue) Path2D buckets, then strokes each bucket once.
+      // Path2D doesn't expose a clear() method, so we allocate fresh
+      // buckets each frame — 40 small objects, GC cost negligible.
+      const TRAIL_ALPHA_BANDS = 5;
+      const TRAIL_HUE_BUCKETS = 8;
+      const TRAIL_BUCKET_COUNT = TRAIL_ALPHA_BANDS * TRAIL_HUE_BUCKETS;
+      let n = 0;  // active bird count
+
+      // Spatial hash grid. Cell size = perception radius, rebuilt each
+      // frame from current bird positions. `gridCell` lists which cell
+      // each bird is in (so we can find self quickly). `gridStart` and
+      // `gridNext` form an intrusive singly-linked list per cell.
+      let cellSize = 60;
+      let gridCols = 1;
+      let gridRows = 1;
+      let gridStart = new Int32Array(1);  // -1 if empty, else first bird index
+      const gridNext = new Int32Array(MAX_BOIDS);
+
+      // Internal stable clock used for hue cycling.
+      let renderClock = 0;
+
+      // Seeded RNG so initial layouts are stable across re-init.
+      function mulberry32(seed) {
+        let s = seed >>> 0;
+        return function () {
+          s = (s + 0x6D2B79F5) >>> 0;
+          let t = s;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      // Pointer state. `pressedX`/`pressedY` are recorded at mousedown so we
+      // can distinguish a tap (no movement, short hold) from a hold.
+      const pointer = {
+        active: false,
+        over: false,    // true once the cursor has ever touched the canvas
+        x: 0,
+        y: 0,
+        prevX: 0,
+        prevY: 0,
+        pressedAt: 0,
+        pressedX: 0,
+        pressedY: 0,
+        moved: 0  // total distance moved while held, in px
+      };
+
+      // Seed attractor: a tap drops a temporary, strongly-attracting point
+      // at the cursor. Birds steer toward it; after `ttl` seconds it fades
+      // out smoothly. There's only one seed active at a time — a fresh tap
+      // replaces the old one.
+      const seed = {
+        active: false,
+        x: 0,
+        y: 0,
+        startedAt: 0,
+        ttl: 3.2,   // seconds before it dissipates entirely
+        hue: 0
+      };
+
+      const TAP_MAX_HOLD_MS = 200;
+      const TAP_MAX_MOVE_PX = 8;
+
+      function currentChapter() { return chapters[currentChapterIndex]; }
+      function currentPalette() { return palettes[paletteIndex]; }
+
+      function getPaletteIndex(name) {
+        const i = palettes.findIndex((p) => p.name === name);
+        return i >= 0 ? i : 0;
+      }
+
+      function bgCss(alpha = 1) {
+        const [r, g, b] = currentPalette().bg;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function syncPageBackground() {
+        const [r, g, b] = currentPalette().bg;
+        const color = `rgb(${r}, ${g}, ${b})`;
+        document.documentElement.style.background = color;
+        document.body.style.background = color;
+      }
+
+      function resizeCanvas() {
+        const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2.5));
+        const width = Math.max(1, Math.floor(canvas.clientWidth * nextDpr));
+        const height = Math.max(1, Math.floor(canvas.clientHeight * nextDpr));
+
+        if (canvas.width === width && canvas.height === height && dpr === nextDpr) return;
+
+        dpr = nextDpr;
+        canvas.width = width;
+        canvas.height = height;
+        overlay.width = width;
+        overlay.height = height;
+        fillBackground();
+        // Recompute grid dimensions; the actual cell-size value is set in
+        // loadChapter() once we know the chapter's perception radius.
+        rebuildGridDims();
+        // If birds already exist, re-seat them on the resized canvas.
+        if (n > 0) {
+          for (let i = 0; i < n; i += 1) {
+            bx[i] = ((bx[i] % width) + width) % width;
+            by[i] = ((by[i] % height) + height) % height;
+          }
+        }
+      }
+
+      function rebuildGridDims() {
+        gridCols = Math.max(1, Math.ceil(canvas.width / cellSize));
+        gridRows = Math.max(1, Math.ceil(canvas.height / cellSize));
+        gridStart = new Int32Array(gridCols * gridRows);
+      }
+
+      function fillBackground() {
+        syncPageBackground();
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss(1);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      function loadChapter() {
+        internalT = 0;
+        seed.active = false;
+        initBoids();
+      }
+
+      function initBoids() {
+        const ch = currentChapter();
+        n = Math.min(MAX_BOIDS, ch.count);
+        cellSize = Math.max(20, ch.perceptRadius * dpr);
+        rebuildGridDims();
+
+        const w = canvas.width;
+        const h = canvas.height;
+        if (w === 0 || h === 0) return;
+
+        const rng = mulberry32(ch.seed * 1000 + n);
+        const palette = palettes[getPaletteIndex(ch.palette)];
+
+        for (let i = 0; i < n; i += 1) {
+          bx[i] = rng() * w;
+          by[i] = rng() * h;
+          const ang = rng() * Math.PI * 2;
+          const sp = (ch.minSpeed + rng() * (ch.maxSpeed - ch.minSpeed)) * dpr;
+          bvx[i] = Math.cos(ang) * sp;
+          bvy[i] = Math.sin(ang) * sp;
+          bhue[i] = (rng() - 0.5) * palette.hRange * 0.5;
+          // Initialise both wing trails so the first frame draws cleanly.
+          // Both wings start collapsed at the bird's centre — they'll fan
+          // out on the first physics step once we know the heading.
+          for (let wing = 0; wing < 2; wing += 1) {
+            for (let k = 0; k < TRAIL_LEN; k += 1) {
+              const base = (((i * 2) + wing) * TRAIL_LEN + k) * 2;
+              trailXY[base]     = bx[i];
+              trailXY[base + 1] = by[i];
+            }
+          }
+          trailHead[i] = 0;
+        }
+      }
+
+      // Spatial hash grid: rebuild from current bird positions. After this,
+      // `gridStart[cell]` is the index of the first bird in that cell (or
+      // -1 if empty), and `gridNext[bird]` chains to the next bird in the
+      // same cell (or -1 at end). Per-cell insertion is O(1).
+      function rebuildGrid() {
+        const total = gridCols * gridRows;
+        for (let i = 0; i < total; i += 1) gridStart[i] = -1;
+        for (let i = 0; i < n; i += 1) {
+          const cx = Math.min(gridCols - 1, Math.max(0, (bx[i] / cellSize) | 0));
+          const cy = Math.min(gridRows - 1, Math.max(0, (by[i] / cellSize) | 0));
+          const cell = cy * gridCols + cx;
+          gridNext[i] = gridStart[cell];
+          gridStart[cell] = i;
+        }
+      }
+
+      function drawPointerGlow() {
+        if (!pointer.active) return;
+
+        const palette = currentPalette();
+        const radius = 110 * dpr;
+        const hue = (palette.hMin + hueShift) % 360;
+        const glow = octx.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius);
+
+        glow.addColorStop(0, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.22)`);
+        glow.addColorStop(0.5, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.08)`);
+        glow.addColorStop(1, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0)`);
+
+        octx.save();
+        octx.globalCompositeOperation = "lighter";
+        octx.fillStyle = glow;
+        octx.beginPath();
+        octx.arc(pointer.x, pointer.y, radius, 0, Math.PI * 2);
+        octx.fill();
+        octx.restore();
+
+        // Ridge marker: a small horizontal bar under the cursor showing
+        // where sculpting is being applied. Only visible during sculpt
+        // (i.e. once the user has moved enough that it isn't a tap).
+        if (pointer.moved > TAP_MAX_MOVE_PX) {
+          const w = 60 * dpr;
+          octx.save();
+          octx.globalCompositeOperation = "lighter";
+          octx.strokeStyle = `hsla(${hue}, ${palette.sat}, 78%, 0.55)`;
+          octx.lineWidth = 2 * dpr;
+          octx.lineCap = "round";
+          octx.beginPath();
+          octx.moveTo(pointer.x - w * 0.5, pointer.y);
+          octx.lineTo(pointer.x + w * 0.5, pointer.y);
+          octx.stroke();
+          octx.restore();
+        }
+      }
+
+      function drawSeedMark() {
+        if (!seed.active) return;
+        const elapsed = renderClock - seed.startedAt;
+        const t = elapsed / seed.ttl;
+        if (t >= 1) {
+          seed.active = false;
+          return;
+        }
+        // Pulsing ring: fast outward expansion, fading alpha.
+        const palette = currentPalette();
+        const baseR = 12 * dpr;
+        const pulse = (renderClock * 1.6) % 1;
+        const ringR = baseR + pulse * 30 * dpr;
+        const ringA = (1 - t) * (1 - pulse) * 0.55;
+
+        octx.save();
+        octx.globalCompositeOperation = "lighter";
+        octx.strokeStyle = `hsla(${seed.hue}, ${palette.sat}, 78%, ${ringA})`;
+        octx.lineWidth = 1.2 * dpr;
+        octx.beginPath();
+        octx.arc(seed.x, seed.y, ringR, 0, Math.PI * 2);
+        octx.stroke();
+
+        // Solid dot at the centre, also fading.
+        octx.fillStyle = `hsla(${seed.hue}, ${palette.sat}, 80%, ${(1 - t) * 0.85})`;
+        octx.beginPath();
+        octx.arc(seed.x, seed.y, 3 * dpr, 0, Math.PI * 2);
+        octx.fill();
+        octx.restore();
+      }
+
+      function drawFrame(now) {
+        if (!lastFrameTime) lastFrameTime = now;
+        const dtMs = Math.min(48, now - lastFrameTime);
+        lastFrameTime = now;
+
+        const ch = currentChapter();
+        const dtSec = (dtMs / 1000) * speedMultiplier;
+        internalT += dtSec;
+        renderClock += dtSec;
+
+        // Wake-layer fade. Drawn at a *boosted* fade rate (4× the chapter
+        // value) so the soft trail of where the flock has been actually
+        // clears within a couple of seconds instead of saturating into
+        // permanent paint. The wake-paint alpha below is correspondingly
+        // small; steady state = paintAlpha / fadeAlpha ≈ 0.20, which
+        // reads as a faint shimmer that fades behind moving birds.
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss((ch.fade * 4) / tailMultiplier);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Overlay clears each frame; bird bodies and live trails go there.
+        octx.clearRect(0, 0, overlay.width, overlay.height);
+
+        const W = canvas.width;
+        const H = canvas.height;
+        const palette = currentPalette();
+        const baseHue = palette.hMin;
+        const hRange = palette.hRange;
+
+        // Tick down the seed attractor.
+        if (seed.active && (renderClock - seed.startedAt) >= seed.ttl) {
+          seed.active = false;
+        }
+
+        // Rebuild the spatial hash from current positions.
+        rebuildGrid();
+
+        // Pre-compute cursor influence parameters.
+        const cursorActive = pointer.over;
+        const panic = pointer.active && pointer.moved <= TAP_MAX_MOVE_PX
+          ? false  // very still hold → don't panic right away (tap detection)
+          : pointer.active;
+        const px = pointer.x;
+        const py = pointer.y;
+        const panicR = ch.panicRadius * dpr;
+        const panicRSq = panicR * panicR;
+        const attractStrength = ch.wAttract;
+
+        // Steering loop. For each bird, sum up forces from neighbours
+        // (separation, alignment, cohesion) using the spatial hash.
+        const sepR = ch.sepRadius * dpr;
+        const sepRSq = sepR * sepR;
+        const percR = ch.perceptRadius * dpr;
+        const percRSq = percR * percR;
+        const wSep = ch.wSeparation;
+        const wAli = ch.wAlignment;
+        const wCoh = ch.wCohesion * cohesionMultiplier;
+        const maxSpeed = ch.maxSpeed * dpr;
+        const minSpeed = ch.minSpeed * dpr;
+        const maxForce = 320 * dpr;  // steering acceleration cap, px/s^2
+
+        for (let i = 0; i < n; i += 1) {
+          const xi = bx[i], yi = by[i];
+          const vxi = bvx[i], vyi = bvy[i];
+
+          let sepX = 0, sepY = 0;
+          let aliX = 0, aliY = 0;
+          let cohX = 0, cohY = 0;
+          let sepCount = 0, aliCount = 0, cohCount = 0;
+
+          // Visit neighbouring cells in the 3x3 around bird i.
+          const ccx = Math.min(gridCols - 1, Math.max(0, (xi / cellSize) | 0));
+          const ccy = Math.min(gridRows - 1, Math.max(0, (yi / cellSize) | 0));
+          for (let dcy = -1; dcy <= 1; dcy += 1) {
+            for (let dcx = -1; dcx <= 1; dcx += 1) {
+              const cxN = ccx + dcx;
+              const cyN = ccy + dcy;
+              if (cxN < 0 || cxN >= gridCols || cyN < 0 || cyN >= gridRows) continue;
+              let j = gridStart[cyN * gridCols + cxN];
+              while (j !== -1) {
+                if (j !== i) {
+                  const dx = bx[j] - xi;
+                  const dy = by[j] - yi;
+                  const d2 = dx * dx + dy * dy;
+                  if (d2 < percRSq && d2 > 0.0001) {
+                    // Alignment & cohesion use all neighbours in percR.
+                    aliX += bvx[j]; aliY += bvy[j]; aliCount += 1;
+                    cohX += bx[j];  cohY += by[j];  cohCount += 1;
+                    // Separation only for very close ones.
+                    if (d2 < sepRSq) {
+                      // Push away inversely with distance — closer = stronger.
+                      const inv = 1.0 / Math.sqrt(d2);
+                      sepX -= dx * inv;
+                      sepY -= dy * inv;
+                      sepCount += 1;
+                    }
+                  }
+                }
+                j = gridNext[j];
+              }
+            }
+          }
+
+          // Convert each accumulated vector into a steering force.
+          // Reynolds: desired - current_velocity, capped by maxForce.
+          let ax = 0, ay = 0;
+
+          if (sepCount > 0) {
+            // sepX/Y is already "away" direction; normalise to a desired
+            // velocity pointing that way at maxSpeed.
+            const m = Math.hypot(sepX, sepY) || 1;
+            const dxv = (sepX / m) * maxSpeed - vxi;
+            const dyv = (sepY / m) * maxSpeed - vyi;
+            ax += dxv * wSep;
+            ay += dyv * wSep;
+          }
+
+          if (aliCount > 0) {
+            // Desired velocity = average neighbour velocity scaled to maxSpeed.
+            const avx = aliX / aliCount;
+            const avy = aliY / aliCount;
+            const m = Math.hypot(avx, avy) || 1;
+            const dxv = (avx / m) * maxSpeed - vxi;
+            const dyv = (avy / m) * maxSpeed - vyi;
+            ax += dxv * wAli;
+            ay += dyv * wAli;
+          }
+
+          if (cohCount > 0) {
+            // Steer toward neighbour centroid.
+            const cxAvg = cohX / cohCount;
+            const cyAvg = cohY / cohCount;
+            const dxc = cxAvg - xi;
+            const dyc = cyAvg - yi;
+            const m = Math.hypot(dxc, dyc) || 1;
+            const dxv = (dxc / m) * maxSpeed - vxi;
+            const dyv = (dyc / m) * maxSpeed - vyi;
+            ax += dxv * wCoh;
+            ay += dyv * wCoh;
+          }
+
+          // Cursor influence.
+          if (cursorActive) {
+            const dxp = px - xi;
+            const dyp = py - yi;
+            const dp2 = dxp * dxp + dyp * dyp;
+            if (panic && dp2 < panicRSq) {
+              // Hold-LMB = scared: strong outward force, scaled by inverse
+              // distance so birds right under the cursor flee hardest.
+              const d = Math.sqrt(dp2) || 1;
+              const falloff = 1 - d / panicR;
+              const fx = -(dxp / d) * ch.panicStrength * maxSpeed * falloff;
+              const fy = -(dyp / d) * ch.panicStrength * maxSpeed * falloff;
+              ax += fx;
+              ay += fy;
+            } else if (!panic) {
+              // Hover = curious: gentle attraction at any range.
+              const d = Math.sqrt(dp2) || 1;
+              const dxv = (dxp / d) * maxSpeed - vxi;
+              const dyv = (dyp / d) * maxSpeed - vyi;
+              ax += dxv * attractStrength;
+              ay += dyv * attractStrength;
+            }
+          }
+
+          // Seed attractor (tap-placed).
+          if (seed.active) {
+            const sAge = (renderClock - seed.startedAt) / seed.ttl;
+            const sStrength = (1 - sAge) * 2.0;  // strong at start, fades out
+            const dxs = seed.x - xi;
+            const dys = seed.y - yi;
+            const d = Math.sqrt(dxs * dxs + dys * dys) || 1;
+            const dxv = (dxs / d) * maxSpeed - vxi;
+            const dyv = (dys / d) * maxSpeed - vyi;
+            ax += dxv * sStrength;
+            ay += dyv * sStrength;
+          }
+
+          // Cap steering acceleration.
+          const amag = Math.hypot(ax, ay);
+          if (amag > maxForce) {
+            const k = maxForce / amag;
+            ax *= k; ay *= k;
+          }
+
+          // Integrate velocity.
+          let nvx = vxi + ax * dtSec;
+          let nvy = vyi + ay * dtSec;
+
+          // Clamp speed to [minSpeed, maxSpeed] so birds always look like
+          // they're flying (no stationary frame).
+          const sp = Math.hypot(nvx, nvy);
+          if (sp > maxSpeed) {
+            const k = maxSpeed / sp;
+            nvx *= k; nvy *= k;
+          } else if (sp < minSpeed && sp > 0.001) {
+            const k = minSpeed / sp;
+            nvx *= k; nvy *= k;
+          }
+
+          bvx[i] = nvx;
+          bvy[i] = nvy;
+        }
+
+        // Position update + toroidal wrap. Done in a second pass so the
+        // steering loop sees consistent positions. After moving, compute
+        // the two wing-tip positions from the current heading and push
+        // them onto the two trail ring buffers.
+        const wingSpread = 7 * dpr;   // half-wingspan — match the body draw
+        const wingBack   = 6 * dpr * 0.4; // wing root sits this far behind centre
+        for (let i = 0; i < n; i += 1) {
+          let nx = bx[i] + bvx[i] * dtSec;
+          let ny = by[i] + bvy[i] * dtSec;
+          if (nx < 0) nx += W;
+          else if (nx >= W) nx -= W;
+          if (ny < 0) ny += H;
+          else if (ny >= H) ny -= H;
+          bx[i] = nx;
+          by[i] = ny;
+
+          // Heading unit vector and its perpendicular.
+          const vmag = Math.hypot(bvx[i], bvy[i]) || 1;
+          const ux = bvx[i] / vmag;
+          const uy = bvy[i] / vmag;
+          // Left wing tip: bird centre, back by wingBack, perpendicular by wingSpread
+          const lx = nx - ux * wingBack + (-uy) * wingSpread;
+          const ly = ny - uy * wingBack + ( ux) * wingSpread;
+          const rx = nx - ux * wingBack - (-uy) * wingSpread;
+          const ry = ny - uy * wingBack - ( ux) * wingSpread;
+
+          const h0 = trailHead[i];
+          // Wing 0 = left
+          let base = (((i * 2) + 0) * TRAIL_LEN + h0) * 2;
+          trailXY[base]     = lx;
+          trailXY[base + 1] = ly;
+          // Wing 1 = right
+          base = (((i * 2) + 1) * TRAIL_LEN + h0) * 2;
+          trailXY[base]     = rx;
+          trailXY[base + 1] = ry;
+          trailHead[i] = (h0 + 1) % TRAIL_LEN;
+        }
+
+        // Wake layer: a tiny per-bird dot painted into the trail buffer at
+        // low alpha. The boosted fade above clears it within ~1.5 seconds
+        // after the flock moves on, so it reads as a soft fading shimmer
+        // rather than a permanent paint streak.
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < n; i += 1) {
+          const hue = (baseHue + (renderClock * 14 + bhue[i]) % hRange + 360) % 360;
+          ctx.fillStyle = `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.05)`;
+          ctx.fillRect(bx[i], by[i], 1.2 * dpr, 1.2 * dpr);
+        }
+
+        // Live trails: draw the last TRAIL_LEN positions for each bird as a
+        // short fading polyline on the overlay. The overlay clears each
+        // frame so length is entirely controlled by TRAIL_LEN — no
+        // accumulation, no streaks.
+        octx.globalCompositeOperation = "lighter";
+        octx.lineCap = "round";
+        // Flicker is applied *per segment* and weighted by how faded the
+        // segment is: fresh segments next to the bird stay steady; older
+        // segments toward the tail flicker harder as they die out, like
+        // a guttering candle. Each segment also gets its own phase from
+        // both bird index and segment index so the whole flock doesn't
+        // pulse in sync.
+        // Batched trail rendering. The original per-segment stroke loop
+        // was 12 000 stroke() calls per frame and killed performance.
+        // Instead we walk the segments ONCE, compute each segment's
+        // alpha+hue, and route it into one of a small grid of Path2D
+        // buckets (TRAIL_ALPHA_BANDS × TRAIL_HUE_BUCKETS). At the end we stroke each
+        // bucket as a single path with a single colour. Cuts stroke()
+        // calls from 12 000 to ≈ TRAIL_ALPHA_BANDS × TRAIL_HUE_BUCKETS (≈ 40), while
+        // walking the segment data only once. The cost is that flicker
+        // quantises into bands rather than being smooth per-segment, but
+        // visually it still reads as twinkling.
+        const buckets = new Array(TRAIL_BUCKET_COUNT);
+        for (let b = 0; b < TRAIL_BUCKET_COUNT; b += 1) buckets[b] = new Path2D();
+
+        octx.lineWidth = 1.0 * dpr;
+        for (let i = 0; i < n; i += 1) {
+          // Pre-compute the bird's hue bucket once.
+          const birdHueOff = ((bhue[i] / hRange) % 1 + 1) % 1;
+          const hueIdx = Math.min(TRAIL_HUE_BUCKETS - 1, Math.floor(birdHueOff * TRAIL_HUE_BUCKETS));
+          const head = trailHead[i];
+          for (let wing = 0; wing < 2; wing += 1) {
+            const wingBase = ((i * 2) + wing) * TRAIL_LEN;
+            const phaseOff = wing === 0 ? 0 : Math.PI * 0.7;
+            let prevX = trailXY[(wingBase + head) * 2];
+            let prevY = trailXY[(wingBase + head) * 2 + 1];
+            for (let k = 1; k < TRAIL_LEN; k += 1) {
+              const idx = (head + k) % TRAIL_LEN;
+              const cx = trailXY[(wingBase + idx) * 2];
+              const cy = trailXY[(wingBase + idx) * 2 + 1];
+              const dx = cx - prevX;
+              const dy = cy - prevY;
+              if (Math.abs(dx) < W * 0.4 && Math.abs(dy) < H * 0.4) {
+                const tk = k / TRAIL_LEN;
+                const baseA = tk * tk * 0.85;
+                const flickerDepth = (1 - tk) * 0.6;
+                const flick = 1 + flickerDepth * (
+                  Math.sin(renderClock * 14 + i * 1.31 + k * 0.83 + phaseOff)
+                  + 0.5 * Math.sin(renderClock * 27 + i * 0.71 + k * 1.91 + phaseOff)
+                ) * 0.5;
+                const segA = baseA * flick;
+                if (segA > 0.02) {
+                  const bandIdx = Math.min(TRAIL_ALPHA_BANDS - 1, Math.max(0,
+                    Math.floor(segA / 0.85 * TRAIL_ALPHA_BANDS)));
+                  const p = buckets[bandIdx * TRAIL_HUE_BUCKETS + hueIdx];
+                  p.moveTo(prevX, prevY);
+                  p.lineTo(cx, cy);
+                }
+              }
+              prevX = cx;
+              prevY = cy;
+            }
+          }
+        }
+        // Stroke each bucket once with its representative colour.
+        for (let bandIdx = 0; bandIdx < TRAIL_ALPHA_BANDS; bandIdx += 1) {
+          const bandA = ((bandIdx + 0.5) / TRAIL_ALPHA_BANDS) * 0.85;
+          for (let hueIdx = 0; hueIdx < TRAIL_HUE_BUCKETS; hueIdx += 1) {
+            const hueOffMid = ((hueIdx + 0.5) / TRAIL_HUE_BUCKETS) * hRange;
+            const hue = (baseHue + hueOffMid + (renderClock * 14) % hRange + 360) % 360;
+            octx.strokeStyle = `hsla(${hue}, ${palette.sat}, ${palette.lit}, ${bandA})`;
+            octx.stroke(buckets[bandIdx * TRAIL_HUE_BUCKETS + hueIdx]);
+          }
+        }
+
+        // Bird bodies: wing-shape triangle pointing along velocity. Drawn
+        // last (on top) so each bird reads cleanly against its own trail.
+        // No round halo — the flatter wing-like silhouette reads as bird
+        // from above instead of a needle.
+        const bodyLen  = 6 * dpr;   // body length
+        const bodyWide = 7 * dpr;   // half-wingspan (wider than the body)
+        for (let i = 0; i < n; i += 1) {
+          const vmag = Math.hypot(bvx[i], bvy[i]) || 1;
+          const ux = bvx[i] / vmag;
+          const uy = bvy[i] / vmag;
+          const hx = bx[i] + ux * bodyLen;
+          const hy = by[i] + uy * bodyLen;
+          const t1x = bx[i] - ux * bodyLen * 0.4 + (-uy) * bodyWide;
+          const t1y = by[i] - uy * bodyLen * 0.4 + ( ux) * bodyWide;
+          const t2x = bx[i] - ux * bodyLen * 0.4 - (-uy) * bodyWide;
+          const t2y = by[i] - uy * bodyLen * 0.4 - ( ux) * bodyWide;
+          const hue = (baseHue + (renderClock * 14 + bhue[i]) % hRange + 360) % 360;
+          octx.fillStyle = `hsla(${hue}, ${palette.sat}, 82%, 0.95)`;
+          octx.beginPath();
+          octx.moveTo(hx, hy);
+          octx.lineTo(t1x, t1y);
+          octx.lineTo(t2x, t2y);
+          octx.closePath();
+          octx.fill();
+        }
+
+        drawPointerGlow();
+        drawSeedMark();
+
+        // Update pointer.prev for next frame.
+        pointer.prevX = pointer.x;
+        pointer.prevY = pointer.y;
+
+        hueShift = (hueShift + 0.08) % 360;
+        frame += 1;
+        animationId = requestAnimationFrame(drawFrame);
+      }
+
+      function startAnimation() {
+        if (!animationId) {
+          lastFrameTime = 0;
+          animationId = requestAnimationFrame(drawFrame);
+        }
+      }
+
+      function stopAnimation() {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = 0;
+        }
+      }
+
+      function setPaused(next) {
+        paused = next;
+        pauseBtn.textContent = paused ? "Resume" : "Pause";
+        if (paused) stopAnimation(); else startAnimation();
+      }
+
+      function updateControlLabels() {
+        paletteBtn.textContent = currentPalette().name;
+        speedInput.value = String(Math.round(speedMultiplier * 100));
+        speedOutput.textContent = `${speedMultiplier.toFixed(1)}x`;
+        cohesionInput.value = String(Math.round(cohesionMultiplier * 100));
+        cohesionOutput.textContent = `${cohesionMultiplier.toFixed(1)}x`;
+        tailInput.value = String(Math.round(tailMultiplier * 100));
+        tailOutput.textContent = `${tailMultiplier.toFixed(1)}x`;
+      }
+
+      const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#%&*+=/\\<>?:;~";
+      const scrambleTokens = new WeakMap();
+
+      function scrambleTo(el, finalText, durationMs = 700) {
+        const token = (scrambleTokens.get(el) || 0) + 1;
+        scrambleTokens.set(el, token);
+        const start = performance.now();
+        const startText = el.textContent || "";
+        const maxLen = Math.max(startText.length, finalText.length);
+
+        function f(now) {
+          if (scrambleTokens.get(el) !== token) return;
+          const progress = Math.min(1, (now - start) / durationMs);
+          let out = "";
+          for (let i = 0; i < finalText.length; i += 1) {
+            const target = finalText[i];
+            const revealAt = (i / maxLen) * 0.7;
+            if (progress >= revealAt + 0.18 || target === " ") {
+              out += target;
+            } else if (progress >= revealAt) {
+              const tt = (progress - revealAt) / 0.18;
+              out += Math.random() < tt ? target : SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            } else {
+              out += SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            }
+          }
+          el.textContent = out;
+          if (progress < 1) requestAnimationFrame(f);
+          else el.textContent = finalText;
+        }
+
+        requestAnimationFrame(f);
+      }
+
+      let isFirstStoryRender = true;
+
+      function updateStory() {
+        const chapter = currentChapter();
+
+        if (isFirstStoryRender) {
+          chapterKicker.textContent = chapter.kicker;
+          chapterTitle.textContent = chapter.title;
+          chapterText.textContent = chapter.text;
+          isFirstStoryRender = false;
+        } else {
+          scrambleTo(chapterKicker, chapter.kicker, 520);
+          scrambleTo(chapterTitle, chapter.title, 760);
+          chapterText.classList.add("is-fading");
+          window.setTimeout(() => {
+            chapterText.textContent = chapter.text;
+            chapterText.classList.remove("is-fading");
+          }, 200);
+        }
+
+        const dots = chapterDots.querySelectorAll(".chapter-dot");
+        dots.forEach((dot, index) => {
+          const active = index === currentChapterIndex;
+          dot.setAttribute("aria-current", active ? "true" : "false");
+          dot.setAttribute("aria-label", `${active ? "Current chapter" : "Go to chapter"}: ${chapters[index].kicker}`);
+        });
+      }
+
+      function setChapter(index) {
+        currentChapterIndex = (index + chapters.length) % chapters.length;
+        const chapter = currentChapter();
+        paletteIndex = getPaletteIndex(chapter.palette);
+        hueShift = 0;
+        loadChapter();
+        updateControlLabels();
+        updateStory();
+        fillBackground();
+
+        if (controlsSecondary.classList.contains("is-open")) {
+          controlsSecondary.classList.remove("is-open");
+          trayToggleBtn.setAttribute("aria-expanded", "false");
+          trayToggleBtn.setAttribute("aria-label", "Show settings");
+        }
+      }
+
+      function clearAndReset() {
+        fillBackground();
+        loadChapter();
+      }
+
+      function buildChapterDots() {
+        chapterDots.innerHTML = "";
+        chapters.forEach((chapter, index) => {
+          const dot = document.createElement("button");
+          dot.type = "button";
+          dot.className = "chapter-dot";
+          dot.addEventListener("click", () => setChapter(index));
+          chapterDots.appendChild(dot);
+        });
+      }
+
+      prevChapterBtn.addEventListener("click", () => setChapter(currentChapterIndex - 1));
+      nextChapterBtn.addEventListener("click", () => setChapter(currentChapterIndex + 1));
+
+      paletteBtn.addEventListener("click", () => {
+        paletteIndex = (paletteIndex + 1) % palettes.length;
+        hueShift = 0;
+        updateControlLabels();
+        fillBackground();
+      });
+
+      clearBtn.addEventListener("click", clearAndReset);
+      pauseBtn.addEventListener("click", () => setPaused(!paused));
+
+      speedInput.addEventListener("input", () => {
+        speedMultiplier = Number(speedInput.value) / 100;
+        speedOutput.textContent = `${speedMultiplier.toFixed(1)}x`;
+      });
+
+      cohesionInput.addEventListener("input", () => {
+        cohesionMultiplier = Number(cohesionInput.value) / 100;
+        cohesionOutput.textContent = `${cohesionMultiplier.toFixed(1)}x`;
+      });
+
+      tailInput.addEventListener("input", () => {
+        tailMultiplier = Number(tailInput.value) / 100;
+        tailOutput.textContent = `${tailMultiplier.toFixed(1)}x`;
+      });
+
+      trayToggleBtn.addEventListener("click", () => {
+        const isOpen = controlsSecondary.classList.toggle("is-open");
+        trayToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        trayToggleBtn.setAttribute("aria-label", isOpen ? "Hide settings" : "Show settings");
+      });
+
+      function updatePointerFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        pointer.over = true;
+      }
+
+      // Seed: a tap drops a temporary, strongly-attracting point at the
+      // cursor. Birds steer toward it for ~3 seconds, then it dissipates.
+      function triggerSeed() {
+        const palette = currentPalette();
+        seed.active = true;
+        seed.x = pointer.x;
+        seed.y = pointer.y;
+        seed.startedAt = renderClock;
+        seed.hue = (palette.hMin + hueShift) % 360;
+      }
+
+      function onPress(event, touch) {
+        pointer.active = true;
+        pointer.pressedAt = performance.now();
+        const src = touch || event;
+        const rect = canvas.getBoundingClientRect();
+        const x = (src.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (src.clientY - rect.top) * (canvas.height / rect.height);
+        pointer.x = x;
+        pointer.y = y;
+        pointer.prevX = x;
+        pointer.prevY = y;
+        pointer.pressedX = x;
+        pointer.pressedY = y;
+        pointer.moved = 0;
+      }
+
+      function onMove(event, touch) {
+        if (!pointer.active) {
+          // Track for hover attraction even before a click.
+          updatePointerFromEvent(touch || event);
+          return;
+        }
+        const prevX = pointer.x;
+        const prevY = pointer.y;
+        updatePointerFromEvent(touch || event);
+        const dx = pointer.x - prevX;
+        const dy = pointer.y - prevY;
+        pointer.moved += Math.sqrt(dx * dx + dy * dy);
+      }
+
+      function onRelease() {
+        if (!pointer.active) return;
+        const hold = performance.now() - pointer.pressedAt;
+        const isTap = hold < TAP_MAX_HOLD_MS && pointer.moved < TAP_MAX_MOVE_PX;
+        if (isTap) triggerSeed();
+        pointer.active = false;
+        pointer.pressedAt = 0;
+        pointer.moved = 0;
+      }
+
+      canvas.addEventListener("mousedown", (event) => onPress(event));
+      window.addEventListener("mousemove", (event) => onMove(event));
+      window.addEventListener("mouseup", onRelease);
+      canvas.addEventListener("mouseleave", () => {
+        onRelease();
+        pointer.over = false;  // stop hover attraction when cursor leaves
+      });
+      canvas.addEventListener("mouseenter", () => {
+        pointer.over = true;
+      });
+
+      canvas.addEventListener("touchstart", (event) => {
+        onPress(event, event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      canvas.addEventListener("touchmove", (event) => {
+        if (event.touches.length > 0) onMove(event, event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener("touchend", onRelease);
+
+      window.addEventListener("resize", resizeCanvas);
+
+      window.addEventListener("keydown", (event) => {
+        const tag = document.activeElement ? document.activeElement.tagName : "";
+        if (tag === "INPUT" || tag === "BUTTON") return;
+
+        if (event.key === "ArrowRight") setChapter(currentChapterIndex + 1);
+        else if (event.key === "ArrowLeft") setChapter(currentChapterIndex - 1);
+        else if (event.key === " ") {
+          setPaused(!paused);
+          event.preventDefault();
+        }
+      });
+
+      buildChapterDots();
+      updateControlLabels();
+      updateStory();
+      resizeCanvas();
+      fillBackground();
+      loadChapter();
+      startAnimation();
+    })();
+  </script>
+</body>
+</html>
