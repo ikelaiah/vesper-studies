@@ -1,0 +1,1454 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vesper &middot; No.05 &mdash; Fluid Study</title>
+  <meta name="description" content="Fluid Study No.05 — an interactive ink-in-water piece by Ikelaiah. Drag to paint glowing ink that drifts on its own through a curl-noise field. Fifth in the Vesper Studies series.">
+  <meta property="og:title" content="Vesper · No.05 — Fluid Study">
+  <meta property="og:description" content="An interactive ink-in-water piece. Drag to paint glowing colour; curl-noise turbulence carries it into wisps and tendrils. Fifth in the Vesper Studies series.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gb-bg0:       #282828;
+      --gb-bg1:       #3c3836;
+      --gb-bg2:       #504945;
+      --gb-bg3:       #665c54;
+      --gb-fg:        #ebdbb2;
+      --gb-fg-dim:    #d5c4a1;
+      --gb-gray:      #a89984;
+      --gb-yellow:    #fabd2f;
+      --gb-orange:    #fe8019;
+      --gb-red:       #fb4934;
+      --gb-aqua:      #8ec07c;
+
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: rgb(8, 8, 20);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: rgb(8, 8, 20);
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.54), rgba(0, 0, 0, 0.16) 42%, rgba(0, 0, 0, 0.04)),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.32));
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* Overlay canvas sits on top of the trail canvas and gets cleared every
+       frame so live elements (strings, bob heads) don't accumulate into the
+       trail buffer. Pointer events pass through to the trail canvas below.
+       Lower z-index than masthead/story/controls so the UI stays on top. */
+    #overlayCanvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    button {
+      flex: 0 0 auto;
+      min-width: 88px;
+      height: 38px;
+      padding: 0 15px;
+      border: 1px solid var(--gb-bg3);
+      border-radius: 999px;
+      background: var(--gb-bg1);
+      color: var(--gb-fg);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    button:hover {
+      background: var(--gb-bg2);
+      border-color: var(--gb-yellow);
+      color: var(--gb-yellow);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+      background: var(--gb-bg3);
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--gb-yellow);
+      outline-offset: 3px;
+    }
+
+    .masthead {
+      position: fixed;
+      top: clamp(20px, 4vh, 44px);
+      right: clamp(22px, 5vw, 64px);
+      z-index: 2;
+      text-align: right;
+      pointer-events: none;
+      font-family: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.72);
+      line-height: 1;
+    }
+
+    .masthead .masthead-rule {
+      display: block;
+      width: 64px;
+      height: 1px;
+      margin: 0 0 10px auto;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .masthead-title {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 68px);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .masthead-title .word-fluid {
+      font-weight: 500;
+    }
+
+    .masthead-title .word-study {
+      font-style: italic;
+      font-weight: 600;
+      color: #e6c46a;
+      background: linear-gradient(180deg, #f3d680 0%, #c89a3a 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      padding: 0 0.04em;
+    }
+
+    .masthead-sub {
+      display: block;
+      margin-top: 6px;
+      font-size: clamp(13px, 1.3vw, 17px);
+      font-weight: 500;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .masthead-sub .no {
+      display: inline-block;
+      letter-spacing: 0.04em;
+      margin-right: 0.35em;
+      text-transform: none;
+      font-style: italic;
+      font-weight: 600;
+      font-size: 1.08em;
+      letter-spacing: 0;
+    }
+
+    .masthead-sub .no .o {
+      display: inline-block;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.78);
+      padding-bottom: 1px;
+      line-height: 1;
+    }
+
+    .story-panel {
+      position: fixed;
+      left: clamp(18px, 4vw, 56px);
+      bottom: clamp(96px, 14vh, 132px);
+      z-index: 2;
+      width: min(520px, calc(100vw - 36px));
+      pointer-events: none;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.62);
+    }
+
+    .chapter-kicker {
+      margin: 0 0 8px;
+      color: var(--gb-orange);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .story-panel h1 {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.96);
+      font-size: clamp(24px, 3.6vw, 42px);
+      line-height: 1.05;
+      font-weight: 780;
+      letter-spacing: -0.005em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .story-panel p {
+      margin: 10px 0 0;
+      max-width: 38ch;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: clamp(13px, 1.2vw, 15px);
+      line-height: 1.55;
+      letter-spacing: 0;
+      transition: opacity 520ms ease;
+    }
+
+    .story-panel p.is-fading {
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .chapter-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 26px;
+      pointer-events: auto;
+    }
+
+    .chapter-dots {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 96px;
+      height: 38px;
+      padding: 0 8px;
+      border: 1px solid var(--gb-bg2);
+      border-radius: 999px;
+      background: rgba(40, 40, 40, 0.55);
+      backdrop-filter: blur(14px);
+    }
+
+    .chapter-dot {
+      min-width: 0;
+      width: 10px;
+      height: 10px;
+      padding: 0;
+      border-radius: 50%;
+      border-color: var(--gb-bg3);
+      background: var(--gb-gray);
+    }
+
+    .chapter-dot:hover {
+      background: var(--gb-fg-dim);
+      border-color: var(--gb-yellow);
+    }
+
+    .chapter-dot[aria-current="true"] {
+      width: 26px;
+      background: var(--gb-yellow);
+      border-color: var(--gb-orange);
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(14px, 3vh, 28px);
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: min(calc(100vw - 24px), 1120px);
+      padding: 10px 14px;
+      border: 1px solid var(--gb-bg2);
+      border-radius: 999px;
+      background: rgba(40, 40, 40, 0.72);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+      user-select: none;
+    }
+
+    .controls-secondary { display: contents; }
+    .tray-toggle { display: none; }
+
+    .slider-control {
+      display: grid;
+      grid-template-columns: auto minmax(80px, 130px) 46px;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 0 6px;
+      color: var(--gb-fg-dim);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .slider-control input {
+      width: 100%;
+      accent-color: var(--gb-yellow);
+      cursor: pointer;
+    }
+
+    .slider-control output {
+      display: inline-flex;
+      justify-content: flex-end;
+      width: 46px;
+      max-width: 46px;
+      overflow: hidden;
+      font-variant-numeric: tabular-nums;
+      color: var(--gb-yellow);
+    }
+
+    @media (max-width: 900px) {
+      body::before {
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.64), rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.52));
+      }
+
+      .story-panel {
+        left: 16px;
+        right: 16px;
+        bottom: 80px;
+        width: auto;
+      }
+
+      .story-panel h1 { font-size: clamp(22px, 6vw, 32px); }
+      .story-panel p { font-size: 13px; line-height: 1.45; }
+
+      .masthead { top: 14px; right: 16px; }
+      .masthead-title { font-size: clamp(20px, 6vw, 28px); }
+      .masthead-sub { font-size: 11px; letter-spacing: 0.24em; }
+      .masthead .masthead-rule { width: 44px; margin-bottom: 6px; }
+
+      .chapter-actions { margin-top: 16px; gap: 8px; }
+      .chapter-actions button {
+        min-width: 70px; height: 34px; padding: 0 10px; font-size: 12px;
+      }
+
+      .chapter-dots { min-width: 82px; height: 34px; gap: 6px; }
+      .chapter-dot { width: 8px; height: 8px; }
+      .chapter-dot[aria-current="true"] { width: 20px; }
+
+      .controls {
+        left: 12px; right: 12px;
+        width: auto; max-width: none;
+        bottom: 12px;
+        transform: none;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        border-radius: 999px;
+        padding: 8px 10px;
+        gap: 8px;
+      }
+
+      .tray-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        height: 38px;
+        padding: 0 14px;
+      }
+
+      .tray-toggle-icon {
+        font-size: 16px;
+        line-height: 1;
+        transition: transform 220ms ease;
+      }
+
+      .tray-toggle[aria-expanded="true"] .tray-toggle-icon {
+        transform: rotate(60deg);
+        color: var(--gb-yellow);
+      }
+
+      .controls-secondary {
+        display: flex;
+        position: fixed;
+        left: 12px; right: 12px;
+        bottom: 64px;
+        z-index: 3;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 14px 14px 16px;
+        border: 1px solid var(--gb-bg2);
+        border-radius: 20px;
+        background: rgba(40, 40, 40, 0.88);
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(16px);
+        transform: translateY(calc(100% + 80px));
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+      }
+
+      .controls-secondary.is-open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .controls-secondary > button { align-self: stretch; }
+
+      .controls-secondary .slider-control {
+        display: grid;
+        grid-template-columns: 80px 1fr 46px;
+        gap: 10px;
+        width: 100%;
+        padding: 4px 2px;
+        font-size: 13px;
+      }
+
+      button {
+        min-width: 78px;
+        height: 36px;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+
+      .controls-secondary > button { height: 40px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="fluidCanvas" aria-label="Interactive fluid field"></canvas>
+  <canvas id="overlayCanvas" aria-hidden="true"></canvas>
+
+  <header class="masthead" aria-label="Exhibition title">
+    <span class="masthead-rule" aria-hidden="true"></span>
+    <h2 class="masthead-title"><span class="word-fluid">Fluid</span> <span class="word-study">Study</span></h2>
+    <span class="masthead-sub"><span class="no">N<span class="o">o</span>.</span>05 &mdash; Ink in Water</span>
+  </header>
+
+  <section class="story-panel" aria-live="polite">
+    <p class="chapter-kicker" id="chapterKicker">Introduction</p>
+    <h1 id="chapterTitle">First Ink</h1>
+    <p id="chapterText">Drag the cursor to paint glowing ink into the water. Invisible currents carry it into wisps and tendrils; each stroke takes on the next colour in the slow rainbow. Tap for a puff.</p>
+    <div class="chapter-actions" aria-label="Chapter navigation">
+      <button id="prevChapterBtn" type="button">Prev</button>
+      <div class="chapter-dots" id="chapterDots" aria-label="Chapters"></div>
+      <button id="nextChapterBtn" type="button">Next</button>
+    </div>
+  </section>
+
+  <div class="controls" id="controls" aria-label="Fluid controls">
+    <button id="trayToggleBtn" class="tray-toggle" type="button" aria-expanded="false" aria-controls="controlsSecondary" aria-label="Show settings">
+      <span class="tray-toggle-icon" aria-hidden="true">&#9881;</span>
+      <span class="tray-toggle-label">Settings</span>
+    </button>
+    <div class="controls-secondary" id="controlsSecondary">
+      <button id="paletteBtn" type="button" aria-label="Cycle palette">Cosmic</button>
+      <button id="clearBtn" type="button">Clear</button>
+      <button id="pauseBtn" type="button">Pause</button>
+      <label class="slider-control">
+        <span>Speed</span>
+        <input id="speedInput" type="range" min="20" max="220" step="5" value="100">
+        <output id="speedOutput">1.0x</output>
+      </label>
+      <label class="slider-control">
+        <span>Flow</span>
+        <input id="flowInput" type="range" min="0" max="300" step="5" value="100">
+        <output id="flowOutput">1.0x</output>
+      </label>
+      <label class="slider-control">
+        <span>Glow</span>
+        <input id="glowInput" type="range" min="20" max="300" step="5" value="100">
+        <output id="glowOutput">1.0x</output>
+      </label>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("fluidCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      // Overlay canvas for live cursor feedback (cursor glow, ripple
+      // hint). Cleared at the start of each frame. The main canvas is
+      // the water surface itself — we putImageData a freshly-rendered
+      // heightmap into it each frame, no trail accumulation needed
+      // because the wave equation handles all temporal behavior.
+      const overlay = document.getElementById("overlayCanvas");
+      const octx = overlay.getContext("2d", { alpha: true });
+      const chapterKicker = document.getElementById("chapterKicker");
+      const chapterTitle = document.getElementById("chapterTitle");
+      const chapterText = document.getElementById("chapterText");
+      const chapterDots = document.getElementById("chapterDots");
+      const prevChapterBtn = document.getElementById("prevChapterBtn");
+      const nextChapterBtn = document.getElementById("nextChapterBtn");
+      const paletteBtn = document.getElementById("paletteBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const speedInput = document.getElementById("speedInput");
+      const speedOutput = document.getElementById("speedOutput");
+      const flowInput = document.getElementById("flowInput");
+      const flowOutput = document.getElementById("flowOutput");
+      const glowInput = document.getElementById("glowInput");
+      const glowOutput = document.getElementById("glowOutput");
+      const trayToggleBtn = document.getElementById("trayToggleBtn");
+      const controlsSecondary = document.getElementById("controlsSecondary");
+
+      // Shared palettes with No.01 for series cohesion
+      const palettes = [
+        { name: "Cosmic", hMin: 220, hRange: 130, sat: "80%", lit: "68%", bg: [8, 8, 20] },
+        { name: "Ocean",  hMin: 175, hRange: 60,  sat: "88%", lit: "62%", bg: [4, 10, 22] },
+        { name: "Aurora", hMin: 100, hRange: 200, sat: "80%", lit: "62%", bg: [4, 10, 14] },
+        { name: "Fire",   hMin: 0,   hRange: 58,  sat: "92%", lit: "60%", bg: [18, 5, 3] },
+        { name: "Forest", hMin: 85,  hRange: 75,  sat: "75%", lit: "55%", bg: [4, 12, 6] }
+      ];
+
+      // Ink in water: a pool of particles drifts through a curl-noise
+      // velocity field, additively splatting glowing colour into an
+      // ImageData buffer each frame. Each stroke spawns particles at the
+      // cursor with the stroke's drag direction; the curl-noise field is
+      // automatically divergence-free, which gives the visual feel of
+      // incompressible fluid (wisps, tendrils, swirls) without the cost
+      // of a real Stable Fluids solver.
+      //
+      // Bloom is faked by additive splatting of soft Gaussian sprites:
+      // overlapping particles brighten naturally where they cluster.
+      const chapters = [
+        {
+          kicker: "Introduction",
+          title: "First Ink",
+          text: "Drag the cursor to paint glowing ink into the water. Invisible currents carry it into wisps and tendrils; each stroke takes on the next colour in the slow rainbow. Tap for a puff.",
+          palette: "Cosmic",
+          noiseScale: 0.0040,   // smaller = larger swirls; bigger = finer detail
+          noiseSpeed: 0.20,     // how fast the noise field evolves over time
+          flowStrength: 60,     // base velocity from the curl field (px/sec)
+          buoyancy: 0,          // upward drift in px/sec² applied per particle
+          spawnPerSecond: 1500, // particles per second while dragging
+          spawnSpread: 7,       // initial random offset radius (px)
+          spawnVelInherit: 0.6, // fraction of cursor velocity each particle inherits
+          dragSwirl: 60,        // extra random swirl velocity per particle (px/sec)
+          lifetimeMin: 2.5,
+          lifetimeMax: 5.0,
+          particleSize: 4.0,    // sprite radius in px (before dpr)
+          colorCycleSec: 6.0,   // seconds per full rainbow cycle
+          colorSpread: 60,      // ± hue jitter per particle within a stroke (deg)
+          satBase: 92,          // base saturation %
+          litBase: 60,          // base lightness % for new particles
+          fadeAlpha: 0.92,      // per-frame multiplicative fade of the canvas
+          tapBurst: 220,        // particles emitted per tap
+          tapVelocity: 220      // outward velocity per tap particle (px/sec)
+        },
+        {
+          kicker: "Chapter 1",
+          title: "Bloom",
+          text: "Each stroke blossoms outward as it ages. The ink doesn't just drift — it spreads, opening like a flower in slow water.",
+          palette: "Ocean",
+          noiseScale: 0.0030,
+          noiseSpeed: 0.16,
+          flowStrength: 50,
+          buoyancy: 0,
+          spawnPerSecond: 1400,
+          spawnSpread: 8,
+          spawnVelInherit: 0.45,
+          dragSwirl: 95,
+          lifetimeMin: 3.5,
+          lifetimeMax: 6.5,
+          particleSize: 4.6,
+          colorCycleSec: 7.5,
+          colorSpread: 50,
+          satBase: 95,
+          litBase: 62,
+          fadeAlpha: 0.94,
+          tapBurst: 280,
+          tapVelocity: 180,
+          radialDrift: 28        // outward push per particle from spawn point
+        },
+        {
+          kicker: "Chapter 2",
+          title: "Vortex",
+          text: "The water spins on itself. Strokes get caught in tight spirals; ink loops and braids around invisible eddies.",
+          palette: "Aurora",
+          noiseScale: 0.0072,    // higher frequency = tighter swirls
+          noiseSpeed: 0.30,
+          flowStrength: 110,
+          buoyancy: 0,
+          spawnPerSecond: 1700,
+          spawnSpread: 6,
+          spawnVelInherit: 0.7,
+          dragSwirl: 80,
+          lifetimeMin: 3.0,
+          lifetimeMax: 6.0,
+          particleSize: 3.8,
+          colorCycleSec: 5.0,
+          colorSpread: 80,
+          satBase: 92,
+          litBase: 60,
+          fadeAlpha: 0.92,
+          tapBurst: 240,
+          tapVelocity: 240
+        },
+        {
+          kicker: "Chapter 3",
+          title: "Plume",
+          text: "Ink rises. Whatever you paint takes off on its own, billowing upward like smoke in cold air. The colours are warm, the columns slow.",
+          palette: "Fire",
+          noiseScale: 0.0048,
+          noiseSpeed: 0.18,
+          flowStrength: 55,
+          buoyancy: 90,          // upward drift
+          spawnPerSecond: 1500,
+          spawnSpread: 5,
+          spawnVelInherit: 0.5,
+          dragSwirl: 50,
+          lifetimeMin: 3.0,
+          lifetimeMax: 5.5,
+          particleSize: 4.4,
+          colorCycleSec: 8.0,
+          colorSpread: 40,
+          satBase: 96,
+          litBase: 64,
+          fadeAlpha: 0.93,
+          tapBurst: 260,
+          tapVelocity: 160
+        },
+        {
+          kicker: "Ending",
+          title: "Dissolve",
+          text: "The water forgets quickly. Each stroke appears and fades in the same breath — a wisp, then nothing. Watch it disappear.",
+          palette: "Forest",
+          noiseScale: 0.0055,
+          noiseSpeed: 0.22,
+          flowStrength: 70,
+          buoyancy: -10,         // slight downward drift — settling
+          spawnPerSecond: 1100,
+          spawnSpread: 8,
+          spawnVelInherit: 0.55,
+          dragSwirl: 70,
+          lifetimeMin: 1.0,
+          lifetimeMax: 2.2,
+          particleSize: 4.2,
+          colorCycleSec: 9.0,
+          colorSpread: 35,
+          satBase: 88,
+          litBase: 58,
+          fadeAlpha: 0.86,       // strong canvas fade — wipes quickly
+          tapBurst: 180,
+          tapVelocity: 200
+        }
+      ];
+
+      let currentChapterIndex = 0;
+      let paletteIndex = getPaletteIndex(chapters[0].palette);
+      let hueShift = 0;
+      let frame = 0;
+      let internalT = 0;
+      let lastFrameTime = 0;
+      let animationId = 0;
+      let paused = false;
+      let dpr = 1;
+      let renderClock = 0;
+
+      let speedMultiplier = 1.0;
+      let flowMultiplier = 1.0;
+      let glowMultiplier = 1.0;
+
+      // Particle pool. Each particle lives in parallel typed arrays for
+      // cache-friendly hot loops. `alive` is implied by `life > 0`.
+      const MAX_PARTICLES = 5000;
+      const px = new Float32Array(MAX_PARTICLES); // position x (canvas px)
+      const py = new Float32Array(MAX_PARTICLES); // position y
+      const vx = new Float32Array(MAX_PARTICLES); // velocity x (px/sec)
+      const vy = new Float32Array(MAX_PARTICLES); // velocity y
+      const sx = new Float32Array(MAX_PARTICLES); // spawn position x (for radial drift)
+      const sy = new Float32Array(MAX_PARTICLES); // spawn position y
+      const phue = new Float32Array(MAX_PARTICLES); // hue (degrees)
+      const psat = new Float32Array(MAX_PARTICLES); // saturation 0..1
+      const plit = new Float32Array(MAX_PARTICLES); // lightness 0..1
+      const plife = new Float32Array(MAX_PARTICLES); // remaining life (sec)
+      const pmaxlife = new Float32Array(MAX_PARTICLES); // initial life (sec)
+      let activeCount = 0;          // number of slots [0..activeCount) currently live
+
+      // Spawning accumulator: chapters request fractional particles per
+      // frame, so we accumulate and emit whole ones.
+      let spawnAccum = 0;
+      // Tap burst queue: when a tap fires we want to emit a burst over
+      // a short window rather than all in one frame (avoids saturating
+      // a single pixel). Stored as { x, y, remaining, hue, until }.
+      const tapBursts = [];
+
+      // Stroke-color clock: hue cycles continuously, each stroke begins
+      // at the current hue so consecutive strokes are visibly different
+      // colours. A held drag keeps spawning at the same hue (locked at
+      // the moment the press began) so a single stroke is colour-coherent.
+      let lockedHue = null;   // null = use cycling hue (hover or first spawn of a drag)
+
+      // Pointer state.
+      const pointer = {
+        active: false,
+        over: false,
+        x: 0,
+        y: 0,
+        prevX: 0,
+        prevY: 0,
+        pressedAt: 0,
+        moved: 0
+      };
+      // Cursor velocity in px/sec, smoothed over a few frames so a single
+      // jittery frame doesn't dominate the spawn velocity.
+      let cursorVx = 0, cursorVy = 0;
+
+      // Render buffer. We additively splat each particle's contribution
+      // into a Uint8ClampedArray and put it once per frame. Sized to the
+      // canvas pixel resolution.
+      let imageBuf = null;     // raw RGBA Uint8ClampedArray
+      let imageData = null;    // wrapping ImageData
+
+      // Pre-rendered soft sprite atlas (small grayscale Gaussian patch).
+      // We sample this per particle and add its values × particle colour
+      // into the image buffer.
+      const SPRITE_SIZE = 16;  // sprite is SPRITE_SIZE × SPRITE_SIZE
+      let spriteAlpha = null;  // Uint8 alphas, Gaussian falloff
+
+      const TAP_MAX_HOLD_MS = 200;
+      const TAP_MAX_MOVE_PX = 8;
+
+      // 2D simplex-ish gradient noise — not full simplex (which is heavier),
+      // but a hashed gradient noise that's fast and visually smooth enough
+      // for our purposes. Returns a value in roughly [-1, 1].
+      const NOISE_PERM = new Uint8Array(512);
+      (function initPerm() {
+        const p = new Uint8Array(256);
+        for (let i = 0; i < 256; i += 1) p[i] = i;
+        // Deterministic shuffle (Fisher-Yates with seeded RNG).
+        let s = 1337;
+        function rnd() {
+          s = (s + 0x6D2B79F5) | 0;
+          let t = s;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        }
+        for (let i = 255; i > 0; i -= 1) {
+          const j = Math.floor(rnd() * (i + 1));
+          const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+        }
+        for (let i = 0; i < 512; i += 1) NOISE_PERM[i] = p[i & 255];
+      })();
+
+      // Gradient directions for 2D — 8 evenly-spaced unit vectors.
+      const GRAD2 = new Float32Array([
+        1, 0,   -1, 0,   0, 1,   0, -1,
+        0.7071, 0.7071,  -0.7071, 0.7071,
+        0.7071, -0.7071, -0.7071, -0.7071
+      ]);
+
+      function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+
+      function noise2(x, y) {
+        const xi = Math.floor(x) & 255;
+        const yi = Math.floor(y) & 255;
+        const xf = x - Math.floor(x);
+        const yf = y - Math.floor(y);
+        const u = fade(xf);
+        const v = fade(yf);
+        const aa = NOISE_PERM[xi + NOISE_PERM[yi]] & 7;
+        const ab = NOISE_PERM[xi + NOISE_PERM[yi + 1]] & 7;
+        const ba = NOISE_PERM[xi + 1 + NOISE_PERM[yi]] & 7;
+        const bb = NOISE_PERM[xi + 1 + NOISE_PERM[yi + 1]] & 7;
+        function dot(gi, dx, dy) {
+          return GRAD2[gi * 2] * dx + GRAD2[gi * 2 + 1] * dy;
+        }
+        const x1 = dot(aa, xf,     yf);
+        const x2 = dot(ba, xf - 1, yf);
+        const y1 = dot(ab, xf,     yf - 1);
+        const y2 = dot(bb, xf - 1, yf - 1);
+        const lerpX1 = x1 + u * (x2 - x1);
+        const lerpX2 = y1 + u * (y2 - y1);
+        return lerpX1 + v * (lerpX2 - lerpX1);
+      }
+
+      // Curl noise: derive a divergence-free 2D vector field from the
+      // gradient of a scalar noise field, rotated 90°. Specifically:
+      // (∂N/∂y, -∂N/∂x). The result is non-zero turbulent motion that
+      // never compresses (∇·v = 0 by construction), which is the magic
+      // making particles look like they're swimming in fluid.
+      function curlAt(x, y, t) {
+        const eps = 0.1;
+        const n1 = noise2(x, y + eps + t);
+        const n2 = noise2(x, y - eps + t);
+        const n3 = noise2(x + eps, y + t);
+        const n4 = noise2(x - eps, y + t);
+        const dNdy = (n1 - n2) / (2 * eps);
+        const dNdx = (n3 - n4) / (2 * eps);
+        return [dNdy, -dNdx];
+      }
+
+      // Build the Gaussian sprite once. It's a SPRITE_SIZE × SPRITE_SIZE
+      // patch of alpha values; particles splat by multiplying their RGB
+      // by these alphas and adding into the image buffer.
+      function buildSprite() {
+        spriteAlpha = new Uint8Array(SPRITE_SIZE * SPRITE_SIZE);
+        const cx = (SPRITE_SIZE - 1) / 2;
+        const cy = (SPRITE_SIZE - 1) / 2;
+        const sigma = SPRITE_SIZE / 5;
+        const sigma2 = sigma * sigma * 2;
+        for (let j = 0; j < SPRITE_SIZE; j += 1) {
+          for (let i = 0; i < SPRITE_SIZE; i += 1) {
+            const dx = i - cx;
+            const dy = j - cy;
+            const a = Math.exp(-(dx * dx + dy * dy) / sigma2);
+            spriteAlpha[j * SPRITE_SIZE + i] = Math.min(255, Math.floor(a * 255));
+          }
+        }
+      }
+      buildSprite();
+
+      function currentChapter() { return chapters[currentChapterIndex]; }
+      function currentPalette() { return palettes[paletteIndex]; }
+
+      function getPaletteIndex(name) {
+        const i = palettes.findIndex((p) => p.name === name);
+        return i >= 0 ? i : 0;
+      }
+
+      function bgCss(alpha = 1) {
+        const [r, g, b] = currentPalette().bg;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function syncPageBackground() {
+        const [r, g, b] = currentPalette().bg;
+        const color = `rgb(${r}, ${g}, ${b})`;
+        document.documentElement.style.background = color;
+        document.body.style.background = color;
+      }
+
+      function resizeCanvas() {
+        const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2.5));
+        const width = Math.max(1, Math.floor(canvas.clientWidth * nextDpr));
+        const height = Math.max(1, Math.floor(canvas.clientHeight * nextDpr));
+        if (canvas.width === width && canvas.height === height && dpr === nextDpr) return;
+        dpr = nextDpr;
+        canvas.width = width;
+        canvas.height = height;
+        overlay.width = width;
+        overlay.height = height;
+        fillBackground();
+        rebuildImageBuf();
+      }
+
+      function fillBackground() {
+        syncPageBackground();
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = bgCss(1);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      function rebuildImageBuf() {
+        if (canvas.width === 0 || canvas.height === 0) return;
+        imageData = ctx.createImageData(canvas.width, canvas.height);
+        imageBuf = imageData.data;
+        // Initialise alphas to 255 (we always write opaque pixels and
+        // composite via blending; this avoids per-pixel alpha writes).
+        for (let i = 3; i < imageBuf.length; i += 4) imageBuf[i] = 255;
+      }
+
+      function loadChapter() {
+        internalT = 0;
+        activeCount = 0;
+        spawnAccum = 0;
+        tapBursts.length = 0;
+        lockedHue = null;
+        fillBackground();
+      }
+
+      // -- HSL → RGB (compact inline) -------------------------------------
+
+      // Returns [R, G, B] as 0..255 ints.
+      function hslToRgb(h, s, l) {
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const hp = h / 60;
+        const xC = c * (1 - Math.abs((hp % 2) - 1));
+        let r = 0, g = 0, b = 0;
+        if      (hp < 1) { r = c; g = xC; }
+        else if (hp < 2) { r = xC; g = c; }
+        else if (hp < 3) { g = c; b = xC; }
+        else if (hp < 4) { g = xC; b = c; }
+        else if (hp < 5) { r = xC; b = c; }
+        else             { r = c; b = xC; }
+        const m = l - c * 0.5;
+        return [
+          Math.round((r + m) * 255),
+          Math.round((g + m) * 255),
+          Math.round((b + m) * 255)
+        ];
+      }
+
+      // -- Particle lifecycle ---------------------------------------------
+
+      function spawnParticle(x, y, vxi, vyi, hue, sat, lit, life) {
+        if (activeCount >= MAX_PARTICLES) return -1;
+        const i = activeCount;
+        px[i] = x;
+        py[i] = y;
+        vx[i] = vxi;
+        vy[i] = vyi;
+        sx[i] = x;
+        sy[i] = y;
+        phue[i] = hue;
+        psat[i] = sat;
+        plit[i] = lit;
+        plife[i] = life;
+        pmaxlife[i] = life;
+        activeCount += 1;
+        return i;
+      }
+
+      // Remove particle i by swapping with the last live one, then
+      // decrementing activeCount. O(1), no GC.
+      function killParticle(i) {
+        const last = activeCount - 1;
+        if (i !== last) {
+          px[i] = px[last];
+          py[i] = py[last];
+          vx[i] = vx[last];
+          vy[i] = vy[last];
+          sx[i] = sx[last];
+          sy[i] = sy[last];
+          phue[i] = phue[last];
+          psat[i] = psat[last];
+          plit[i] = plit[last];
+          plife[i] = plife[last];
+          pmaxlife[i] = pmaxlife[last];
+        }
+        activeCount -= 1;
+      }
+
+      // Current "stroke colour" — the cycling rainbow hue at this moment.
+      // Each new stroke (drag-down) locks this hue for its duration.
+      function cyclingHue() {
+        const ch = currentChapter();
+        const palette = currentPalette();
+        // Cycle across the palette's hue range; the palette's hMin is the
+        // base hue and hRange is how far we sweep.
+        const t = (renderClock / ch.colorCycleSec) % 1;
+        return (palette.hMin + t * palette.hRange) % 360;
+      }
+
+      // -- Cursor injection (the drag verb) -------------------------------
+
+      function emitAlongStroke(x0, y0, x1, y1, perSec, dt, ch) {
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const len = Math.hypot(dx, dy);
+        // Decide how many particles this frame's segment should emit.
+        spawnAccum += perSec * dt;
+        const want = Math.floor(spawnAccum);
+        spawnAccum -= want;
+        if (want === 0) return;
+        // Distribute evenly along the segment.
+        const baseHue = lockedHue !== null ? lockedHue : cyclingHue();
+        const sat = ch.satBase / 100;
+        const lit = ch.litBase / 100;
+        for (let k = 0; k < want; k += 1) {
+          const t = (k + Math.random()) / want;
+          const jx = x0 + dx * t + (Math.random() - 0.5) * ch.spawnSpread * dpr;
+          const jy = y0 + dy * t + (Math.random() - 0.5) * ch.spawnSpread * dpr;
+          // Velocity: inherit a fraction of the cursor velocity + random
+          // swirl. The swirl gives each particle a slightly different
+          // initial direction so the stroke immediately starts breaking
+          // into wisps.
+          const swirlAng = Math.random() * Math.PI * 2;
+          const swirlMag = ch.dragSwirl * dpr * (0.5 + Math.random() * 0.5);
+          const ivx = cursorVx * ch.spawnVelInherit + Math.cos(swirlAng) * swirlMag;
+          const ivy = cursorVy * ch.spawnVelInherit + Math.sin(swirlAng) * swirlMag;
+          // Per-particle hue jitter within the stroke for ink-cloud variation.
+          const hue = (baseHue + (Math.random() - 0.5) * ch.colorSpread + 360) % 360;
+          const life = ch.lifetimeMin + Math.random() * (ch.lifetimeMax - ch.lifetimeMin);
+          spawnParticle(jx, jy, ivx, ivy, hue, sat, lit, life);
+        }
+      }
+
+      function emitTapBurst(x, y, ch) {
+        const baseHue = cyclingHue();
+        const sat = ch.satBase / 100;
+        const lit = ch.litBase / 100;
+        const count = ch.tapBurst;
+        for (let k = 0; k < count; k += 1) {
+          const a = (k / count) * Math.PI * 2 + Math.random() * 0.4;
+          const speed = ch.tapVelocity * dpr * (0.4 + Math.random() * 0.8);
+          const jx = x + Math.cos(a) * ch.spawnSpread * dpr * Math.random();
+          const jy = y + Math.sin(a) * ch.spawnSpread * dpr * Math.random();
+          const hue = (baseHue + (Math.random() - 0.5) * ch.colorSpread + 360) % 360;
+          const life = ch.lifetimeMin + Math.random() * (ch.lifetimeMax - ch.lifetimeMin);
+          spawnParticle(jx, jy, Math.cos(a) * speed, Math.sin(a) * speed, hue, sat, lit, life);
+        }
+      }
+
+      // -- Per-frame physics + render --------------------------------------
+
+      // Splat a single particle into the RGBA image buffer. Additive
+      // (saturating) so overlapping particles brighten and clip to white.
+      function splatParticle(x, y, r, g, b, alpha) {
+        const W = canvas.width;
+        const H = canvas.height;
+        const half = (SPRITE_SIZE - 1) / 2;
+        // Sprite is drawn centred on (x, y).
+        const sX0 = Math.floor(x - half);
+        const sY0 = Math.floor(y - half);
+        // Clip to canvas.
+        const ix0 = Math.max(0, sX0);
+        const iy0 = Math.max(0, sY0);
+        const ix1 = Math.min(W, sX0 + SPRITE_SIZE);
+        const iy1 = Math.min(H, sY0 + SPRITE_SIZE);
+        if (ix0 >= ix1 || iy0 >= iy1) return;
+        const r255 = r;
+        const g255 = g;
+        const b255 = b;
+        for (let yy = iy0; yy < iy1; yy += 1) {
+          const sy = yy - sY0;
+          const srcRow = sy * SPRITE_SIZE;
+          const dstRowBase = yy * W * 4;
+          for (let xx = ix0; xx < ix1; xx += 1) {
+            const sx = xx - sX0;
+            const a = (spriteAlpha[srcRow + sx] * alpha) >> 8;  // 0..255
+            if (a === 0) continue;
+            const idx = dstRowBase + xx * 4;
+            // Additive saturating into RGB. Alpha channel stays at 255.
+            const r0 = imageBuf[idx]     + ((r255 * a) >> 8);
+            const g0 = imageBuf[idx + 1] + ((g255 * a) >> 8);
+            const b0 = imageBuf[idx + 2] + ((b255 * a) >> 8);
+            imageBuf[idx]     = r0 > 255 ? 255 : r0;
+            imageBuf[idx + 1] = g0 > 255 ? 255 : g0;
+            imageBuf[idx + 2] = b0 > 255 ? 255 : b0;
+          }
+        }
+      }
+
+      function tickAndRender(dt) {
+        const ch = currentChapter();
+        const palette = currentPalette();
+        const W = canvas.width;
+        const H = canvas.height;
+        const flowStr = ch.flowStrength * flowMultiplier * dpr;
+        const noiseTime = renderClock * ch.noiseSpeed;
+        const noiseScale = ch.noiseScale / dpr;
+        const buoyancy = ch.buoyancy * dpr;
+        const radialDrift = (ch.radialDrift || 0) * dpr;
+
+        // Fade canvas (multiplicative). This produces the trail/fade look
+        // and clears stale particles. We modulate every RGB byte directly
+        // in the image buffer — cheaper than a fillRect over an image we're
+        // about to putImageData over anyway.
+        const fadeFix = Math.pow(ch.fadeAlpha, dt * 60);
+        // Convert to 0..256 fixed point.
+        const fadeQ = Math.max(0, Math.min(256, Math.floor(fadeFix * 256)));
+        for (let i = 0, n = imageBuf.length; i < n; i += 4) {
+          imageBuf[i]     = (imageBuf[i]     * fadeQ) >> 8;
+          imageBuf[i + 1] = (imageBuf[i + 1] * fadeQ) >> 8;
+          imageBuf[i + 2] = (imageBuf[i + 2] * fadeQ) >> 8;
+          // alpha stays 255
+        }
+
+        // Integrate particles + splat.
+        let i = 0;
+        while (i < activeCount) {
+          plife[i] -= dt;
+          if (plife[i] <= 0) { killParticle(i); continue; }
+
+          // Curl-noise velocity from current position.
+          const cn = curlAt(px[i] * noiseScale, py[i] * noiseScale, noiseTime);
+          let ax = cn[0] * flowStr;
+          let ay = cn[1] * flowStr - buoyancy;
+          // Optional radial drift (Bloom chapter): push outward from spawn.
+          if (radialDrift > 0) {
+            const rdx = px[i] - sx[i];
+            const rdy = py[i] - sy[i];
+            const rd = Math.hypot(rdx, rdy) + 0.01;
+            ax += (rdx / rd) * radialDrift;
+            ay += (rdy / rd) * radialDrift;
+          }
+
+          // Semi-implicit integration: curl-noise replaces velocity (the
+          // particle locally rides the flow). We blend the noise velocity
+          // with the inherited stroke velocity, weighted by age — fresh
+          // particles still carry the stroke's punch, older ones surrender
+          // to the field.
+          const ageT = 1 - plife[i] / pmaxlife[i];  // 0=new, 1=dying
+          const blend = Math.min(1, ageT * 1.6);    // becomes 100% noise at 62.5% age
+          vx[i] = vx[i] * (1 - blend) + ax * blend;
+          vy[i] = vy[i] * (1 - blend) + ay * blend;
+
+          px[i] += vx[i] * dt;
+          py[i] += vy[i] * dt;
+
+          // Kill particles that drift far off-canvas to free pool slots.
+          if (px[i] < -20 || px[i] > W + 20 || py[i] < -20 || py[i] > H + 20) {
+            killParticle(i); continue;
+          }
+
+          // Splat. Brightness eases in then out over lifetime.
+          const lifeT = plife[i] / pmaxlife[i];
+          // Bell-curve alpha: peak at ~70% of life, fade to 0 at end.
+          let alpha = lifeT * (1 - lifeT) * 4;
+          alpha = Math.max(0, Math.min(1, alpha)) * 0.9 * glowMultiplier;
+          if (alpha < 0.01) { i += 1; continue; }
+          const rgb = hslToRgb(phue[i], psat[i], plit[i]);
+          // Splat scaled radius based on chapter particleSize and life.
+          // (We don't actually vary sprite size — the sprite is fixed.
+          // To vary, we'd need pre-rendered atlases per size. The Gaussian
+          // sprite already looks soft enough that fixed size reads well.)
+          const a256 = Math.floor(alpha * 255);
+          splatParticle(px[i], py[i], rgb[0], rgb[1], rgb[2], a256);
+
+          i += 1;
+        }
+
+        // Drag-spawn ink along the cursor stroke if active.
+        if (pointer.active && pointer.over) {
+          emitAlongStroke(pointer.prevX, pointer.prevY, pointer.x, pointer.y,
+                          ch.spawnPerSecond, dt, ch);
+        }
+
+        // Put the buffer onto the canvas.
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      // -- Cursor velocity smoothing ---------------------------------------
+
+      function updateCursorVelocity(dt) {
+        if (dt <= 0) return;
+        const instVx = (pointer.x - pointer.prevX) / dt;
+        const instVy = (pointer.y - pointer.prevY) / dt;
+        // EMA with short half-life so instantaneous direction is responsive
+        // but a single noisy frame doesn't dominate.
+        const a = 0.45;
+        cursorVx = cursorVx * (1 - a) + instVx * a;
+        cursorVy = cursorVy * (1 - a) + instVy * a;
+      }
+
+      // -- Overlay cursor glow --------------------------------------------
+
+      function drawPointerGlow() {
+        if (!pointer.over) return;
+        const palette = currentPalette();
+        const radius = 60 * dpr;
+        const hue = cyclingHue();
+        const glow = octx.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius);
+        glow.addColorStop(0, `hsla(${hue}, ${palette.sat}, 70%, 0.30)`);
+        glow.addColorStop(0.6, `hsla(${hue}, ${palette.sat}, 70%, 0.08)`);
+        glow.addColorStop(1, `hsla(${hue}, ${palette.sat}, 70%, 0)`);
+        octx.save();
+        octx.globalCompositeOperation = "lighter";
+        octx.fillStyle = glow;
+        octx.beginPath();
+        octx.arc(pointer.x, pointer.y, radius, 0, Math.PI * 2);
+        octx.fill();
+        octx.restore();
+      }
+
+      // -- Main loop ------------------------------------------------------
+
+      function drawFrame(now) {
+        if (!lastFrameTime) lastFrameTime = now;
+        let dtMs = now - lastFrameTime;
+        if (dtMs > 48) dtMs = 48;
+        lastFrameTime = now;
+        const dt = (dtMs / 1000) * speedMultiplier;
+        internalT += dt;
+        renderClock += dt;
+
+        updateCursorVelocity(dt);
+        tickAndRender(dt);
+
+        octx.clearRect(0, 0, overlay.width, overlay.height);
+        drawPointerGlow();
+
+        pointer.prevX = pointer.x;
+        pointer.prevY = pointer.y;
+
+        hueShift = (hueShift + 0.06) % 360;
+        frame += 1;
+        animationId = requestAnimationFrame(drawFrame);
+      }
+
+      function startAnimation() {
+        if (!animationId) {
+          lastFrameTime = 0;
+          animationId = requestAnimationFrame(drawFrame);
+        }
+      }
+
+      function stopAnimation() {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = 0;
+        }
+      }
+
+      function setPaused(next) {
+        paused = next;
+        pauseBtn.textContent = paused ? "Resume" : "Pause";
+        if (paused) stopAnimation(); else startAnimation();
+      }
+
+      function updateControlLabels() {
+        paletteBtn.textContent = currentPalette().name;
+        speedInput.value = String(Math.round(speedMultiplier * 100));
+        speedOutput.textContent = `${speedMultiplier.toFixed(1)}x`;
+        flowInput.value = String(Math.round(flowMultiplier * 100));
+        flowOutput.textContent = `${flowMultiplier.toFixed(1)}x`;
+        glowInput.value = String(Math.round(glowMultiplier * 100));
+        glowOutput.textContent = `${glowMultiplier.toFixed(1)}x`;
+      }
+
+      const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#%&*+=/\\<>?:;~";
+      const scrambleTokens = new WeakMap();
+
+      function scrambleTo(el, finalText, durationMs = 700) {
+        const token = (scrambleTokens.get(el) || 0) + 1;
+        scrambleTokens.set(el, token);
+        const start = performance.now();
+        const startText = el.textContent || "";
+        const maxLen = Math.max(startText.length, finalText.length);
+
+        function f(now) {
+          if (scrambleTokens.get(el) !== token) return;
+          const progress = Math.min(1, (now - start) / durationMs);
+          let out = "";
+          for (let i = 0; i < finalText.length; i += 1) {
+            const target = finalText[i];
+            const revealAt = (i / maxLen) * 0.7;
+            if (progress >= revealAt + 0.18 || target === " ") {
+              out += target;
+            } else if (progress >= revealAt) {
+              const tt = (progress - revealAt) / 0.18;
+              out += Math.random() < tt ? target : SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            } else {
+              out += SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            }
+          }
+          el.textContent = out;
+          if (progress < 1) requestAnimationFrame(f);
+          else el.textContent = finalText;
+        }
+
+        requestAnimationFrame(f);
+      }
+
+      let isFirstStoryRender = true;
+
+      function updateStory() {
+        const chapter = currentChapter();
+
+        if (isFirstStoryRender) {
+          chapterKicker.textContent = chapter.kicker;
+          chapterTitle.textContent = chapter.title;
+          chapterText.textContent = chapter.text;
+          isFirstStoryRender = false;
+        } else {
+          scrambleTo(chapterKicker, chapter.kicker, 520);
+          scrambleTo(chapterTitle, chapter.title, 760);
+          chapterText.classList.add("is-fading");
+          window.setTimeout(() => {
+            chapterText.textContent = chapter.text;
+            chapterText.classList.remove("is-fading");
+          }, 200);
+        }
+
+        const dots = chapterDots.querySelectorAll(".chapter-dot");
+        dots.forEach((dot, index) => {
+          const active = index === currentChapterIndex;
+          dot.setAttribute("aria-current", active ? "true" : "false");
+          dot.setAttribute("aria-label", `${active ? "Current chapter" : "Go to chapter"}: ${chapters[index].kicker}`);
+        });
+      }
+
+      function setChapter(index) {
+        currentChapterIndex = (index + chapters.length) % chapters.length;
+        const chapter = currentChapter();
+        paletteIndex = getPaletteIndex(chapter.palette);
+        hueShift = 0;
+        loadChapter();
+        updateControlLabels();
+        updateStory();
+        fillBackground();
+
+        if (controlsSecondary.classList.contains("is-open")) {
+          controlsSecondary.classList.remove("is-open");
+          trayToggleBtn.setAttribute("aria-expanded", "false");
+          trayToggleBtn.setAttribute("aria-label", "Show settings");
+        }
+      }
+
+      function clearAndReset() {
+        fillBackground();
+        loadChapter();
+      }
+
+      function buildChapterDots() {
+        chapterDots.innerHTML = "";
+        chapters.forEach((chapter, index) => {
+          const dot = document.createElement("button");
+          dot.type = "button";
+          dot.className = "chapter-dot";
+          dot.addEventListener("click", () => setChapter(index));
+          chapterDots.appendChild(dot);
+        });
+      }
+
+      prevChapterBtn.addEventListener("click", () => setChapter(currentChapterIndex - 1));
+      nextChapterBtn.addEventListener("click", () => setChapter(currentChapterIndex + 1));
+
+      paletteBtn.addEventListener("click", () => {
+        paletteIndex = (paletteIndex + 1) % palettes.length;
+        hueShift = 0;
+        updateControlLabels();
+        fillBackground();
+      });
+
+      clearBtn.addEventListener("click", clearAndReset);
+      pauseBtn.addEventListener("click", () => setPaused(!paused));
+
+      speedInput.addEventListener("input", () => {
+        speedMultiplier = Number(speedInput.value) / 100;
+        speedOutput.textContent = `${speedMultiplier.toFixed(1)}x`;
+      });
+
+      flowInput.addEventListener("input", () => {
+        flowMultiplier = Number(flowInput.value) / 100;
+        flowOutput.textContent = `${flowMultiplier.toFixed(1)}x`;
+      });
+
+      glowInput.addEventListener("input", () => {
+        glowMultiplier = Number(glowInput.value) / 100;
+        glowOutput.textContent = `${glowMultiplier.toFixed(1)}x`;
+      });
+
+      trayToggleBtn.addEventListener("click", () => {
+        const isOpen = controlsSecondary.classList.toggle("is-open");
+        trayToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        trayToggleBtn.setAttribute("aria-label", isOpen ? "Hide settings" : "Show settings");
+      });
+
+      function updatePointerFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        pointer.over = true;
+      }
+
+      // Tap: a small puff. Emits a radial burst of ink particles at the
+      // cursor with outward velocities and the current cycling colour.
+      function triggerTap() {
+        const ch = currentChapter();
+        emitTapBurst(pointer.x, pointer.y, ch);
+      }
+
+      function onPress(event, touch) {
+        pointer.active = true;
+        pointer.pressedAt = performance.now();
+        const src = touch || event;
+        const rect = canvas.getBoundingClientRect();
+        const x = (src.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (src.clientY - rect.top) * (canvas.height / rect.height);
+        pointer.x = x;
+        pointer.y = y;
+        pointer.prevX = x;
+        pointer.prevY = y;
+        pointer.pressedX = x;
+        pointer.pressedY = y;
+        pointer.moved = 0;
+        // Lock the stroke colour so a single drag is colour-coherent
+        // even as the cycling hue advances during the drag.
+        lockedHue = cyclingHue();
+      }
+
+      function onMove(event, touch) {
+        if (!pointer.active) {
+          // Track for hover attraction even before a click.
+          updatePointerFromEvent(touch || event);
+          return;
+        }
+        const prevX = pointer.x;
+        const prevY = pointer.y;
+        updatePointerFromEvent(touch || event);
+        const dx = pointer.x - prevX;
+        const dy = pointer.y - prevY;
+        pointer.moved += Math.sqrt(dx * dx + dy * dy);
+      }
+
+      function onRelease() {
+        if (!pointer.active) return;
+        const hold = performance.now() - pointer.pressedAt;
+        const isTap = hold < TAP_MAX_HOLD_MS && pointer.moved < TAP_MAX_MOVE_PX;
+        if (isTap) triggerTap();
+        pointer.active = false;
+        pointer.pressedAt = 0;
+        pointer.moved = 0;
+        lockedHue = null;
+      }
+
+      canvas.addEventListener("mousedown", (event) => onPress(event));
+      window.addEventListener("mousemove", (event) => onMove(event));
+      window.addEventListener("mouseup", onRelease);
+      canvas.addEventListener("mouseleave", () => {
+        onRelease();
+        pointer.over = false;  // stop hover attraction when cursor leaves
+      });
+      canvas.addEventListener("mouseenter", () => {
+        pointer.over = true;
+      });
+
+      canvas.addEventListener("touchstart", (event) => {
+        onPress(event, event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      canvas.addEventListener("touchmove", (event) => {
+        if (event.touches.length > 0) onMove(event, event.touches[0]);
+        event.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener("touchend", onRelease);
+
+      window.addEventListener("resize", resizeCanvas);
+
+      window.addEventListener("keydown", (event) => {
+        const tag = document.activeElement ? document.activeElement.tagName : "";
+        if (tag === "INPUT" || tag === "BUTTON") return;
+
+        if (event.key === "ArrowRight") setChapter(currentChapterIndex + 1);
+        else if (event.key === "ArrowLeft") setChapter(currentChapterIndex - 1);
+        else if (event.key === " ") {
+          setPaused(!paused);
+          event.preventDefault();
+        }
+      });
+
+      buildChapterDots();
+      updateControlLabels();
+      updateStory();
+      resizeCanvas();
+      fillBackground();
+      loadChapter();
+      startAnimation();
+    })();
+  </script>
+</body>
+</html>
