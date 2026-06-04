@@ -69,7 +69,9 @@ The noise field itself slowly evolves over time (we offset the noise sample with
 
 The canvas is rendered each frame from a single `Uint8ClampedArray` (RGBA bytes, sized to the canvas). Each particle's splat writes additively (saturating) into this buffer, then a single `putImageData` puts the whole buffer on the canvas. No per-particle canvas calls — just memory writes — so 5000 particles render in well under a millisecond on commodity hardware.
 
-A multiplicative fade is applied to the whole image buffer at the start of each frame (`buf[i] *= chapter.fadeAlpha`), producing the trail/decay look. This is one pass over the buffer, also fast.
+A multiplicative fade is applied to the whole image buffer at the start of each frame (`buf[i] *= chapter.fadeAlpha`), producing the trail/decay look. This is one pass over the buffer, also fast. The live-ink fade and the dust composite (see *Crystallization* below) are fused into a single pass so we touch each pixel's bytes once per frame instead of multiple times.
+
+**Internal render resolution is half the displayed canvas resolution.** The canvas backing store (where we splat and fade) is at half device-pixel ratio, while CSS keeps the visible canvas at full viewport size — the browser bilinearly upscales for free in the GPU compositor. This makes every full-canvas pass and every particle splat ~1/4 the cost compared to rendering at full resolution. Because particles are already soft Gaussian sprites and the additive bloom hides hard edges, the visual quality loss from the half-res render is essentially invisible; the framerate headroom it buys is considerable, especially on high-DPI displays. The dust buffer (memory layer) is at half the *render* resolution again — so 1/16 the size of the visible canvas — since dust is diffuse by definition and doesn't need any more detail than that.
 
 ### Stroke colour
 

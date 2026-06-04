@@ -557,12 +557,14 @@
           attractRadius: 14,    // radius in px (before dpr) for the neighbour search
           // Crystallization: settled (slow) old particles have a chance
           // each frame to "crystallize" — stop moving, fade into a
-          // permanent dust layer that records where the strokes settled.
-          crystallizeChance: 0.05,  // per-eligible-frame probability
-          crystallizeMinAge: 0.55,  // must be at least this fraction through life
-          crystallizeMaxSpeed: 30,  // must be moving slower than this (px/sec, pre-dpr)
-          dustFadePerSec: 0.05,     // dust layer fades to ~e^-0.05 per second
-          dustAlpha: 0.35,          // brightness of each crystallized splat
+          // dust layer that records where the strokes settled. Rates
+          // tuned conservatively so dust reads as a faint signature
+          // building up over a minute, not a snowstorm in 10 seconds.
+          crystallizeChance: 0.010, // per-eligible-frame probability
+          crystallizeMinAge: 0.75,  // must be deep into its life
+          crystallizeMaxSpeed: 14,  // must be barely moving (px/sec, pre-dpr)
+          dustFadePerSec: 0.30,     // dust fades to ~37% over 3.3s; steady state stays light
+          dustAlpha: 0.22,
           // Color mixing: each particle samples the local "ink colour
           // field" and drifts its hue toward the local average.
           colorMix: 0.06            // 0 = no mixing, ~0.1 = strong mixing
@@ -593,11 +595,11 @@
           radialDrift: 28,       // outward push per particle from spawn point
           attraction: 10,        // light clumping — Bloom is about spreading, not pulling
           attractRadius: 16,
-          crystallizeChance: 0.04,
-          crystallizeMinAge: 0.6,
-          crystallizeMaxSpeed: 28,
-          dustFadePerSec: 0.04,
-          dustAlpha: 0.42,       // stronger dust — Bloom leaves bright flowers
+          crystallizeChance: 0.012,
+          crystallizeMinAge: 0.78,
+          crystallizeMaxSpeed: 12,
+          dustFadePerSec: 0.22,  // a touch slower — Bloom leaves faint flower-shadows
+          dustAlpha: 0.26,
           colorMix: 0.08         // strong mixing — petals share colour
         },
         {
@@ -625,11 +627,11 @@
           tapVelocity: 240,
           attraction: 28,        // strong clumping — Vortex makes thick braided filaments
           attractRadius: 12,
-          crystallizeChance: 0.02,  // less crystallization — Vortex is restless
-          crystallizeMinAge: 0.65,
-          crystallizeMaxSpeed: 22,
-          dustFadePerSec: 0.07,
-          dustAlpha: 0.28,
+          crystallizeChance: 0.006, // Vortex is restless — very little settles
+          crystallizeMinAge: 0.80,
+          crystallizeMaxSpeed: 10,
+          dustFadePerSec: 0.40,
+          dustAlpha: 0.18,
           colorMix: 0.12         // strong mixing — eddies blur colours together
         },
         {
@@ -657,11 +659,11 @@
           tapVelocity: 160,
           attraction: 22,        // moderate clumping for column structure
           attractRadius: 14,
-          crystallizeChance: 0.06,  // ash settles at the base of columns
-          crystallizeMinAge: 0.5,
-          crystallizeMaxSpeed: 35,
-          dustFadePerSec: 0.06,
-          dustAlpha: 0.48,
+          crystallizeChance: 0.015, // ash settles, but Plume rises so most particles escape
+          crystallizeMinAge: 0.72,
+          crystallizeMaxSpeed: 14,
+          dustFadePerSec: 0.25,
+          dustAlpha: 0.30,       // slightly brighter — embers glow at the base
           colorMix: 0.05         // warm tones stay distinct
         },
         {
@@ -697,11 +699,11 @@
           // nearby ink toward itself.
           cursorPull: 240,            // px/sec² of pull at the cursor
           cursorPullRadius: 180,      // radius in px (before dpr)
-          crystallizeChance: 0.04,
-          crystallizeMinAge: 0.5,
-          crystallizeMaxSpeed: 40,
-          dustFadePerSec: 0.025,      // dust persists longest here
-          dustAlpha: 0.55,            // brightest dust — the chapter is about memory
+          crystallizeChance: 0.012,
+          crystallizeMinAge: 0.72,
+          crystallizeMaxSpeed: 14,
+          dustFadePerSec: 0.18,       // dust still persists longest here, but visible decay
+          dustAlpha: 0.34,            // brightest dust of the five — the chapter is about memory
           colorMix: 0.10              // strong mixing in the slow drift
         }
       ];
@@ -931,12 +933,25 @@
 
       function resizeCanvas() {
         const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2.5));
-        const width = Math.max(1, Math.floor(canvas.clientWidth * nextDpr));
-        const height = Math.max(1, Math.floor(canvas.clientHeight * nextDpr));
+        // Internal render resolution is HALF the displayed resolution.
+        // The canvas backing store is the small one; CSS scales it up to
+        // fill the viewport. This cuts every full-canvas pass (fade +
+        // composite) and every particle splat to ~1/4 the cost, with
+        // virtually no visible quality loss because the particles are
+        // already soft Gaussian sprites. The browser does the upscale
+        // for free in the compositor.
+        const RENDER_DOWNSCALE = 2;
+        const width = Math.max(1, Math.floor(canvas.clientWidth * nextDpr / RENDER_DOWNSCALE));
+        const height = Math.max(1, Math.floor(canvas.clientHeight * nextDpr / RENDER_DOWNSCALE));
         if (canvas.width === width && canvas.height === height && dpr === nextDpr) return;
-        dpr = nextDpr;
+        // Effective dpr — every "px" measurement inside the sim must use
+        // this so injection radii, attraction radii, etc. are scaled
+        // correctly for the smaller render buffer.
+        dpr = nextDpr / RENDER_DOWNSCALE;
         canvas.width = width;
         canvas.height = height;
+        // Overlay matches the render-resolution canvas so the cursor glow
+        // uses the same pointer coords. CSS scales both up identically.
         overlay.width = width;
         overlay.height = height;
         fillBackground();
@@ -957,9 +972,11 @@
         imageData = ctx.createImageData(canvas.width, canvas.height);
         imageBuf = imageData.data;
         for (let i = 3; i < imageBuf.length; i += 4) imageBuf[i] = 255;
-        // Dust buffer sized to canvas pixels (3 floats per pixel).
-        dustWidth = canvas.width;
-        dustHeight = canvas.height;
+        // Dust buffer at half resolution (4× less work for fade+composite
+        // and 4× cheaper splats). Dust is diffuse by definition so the
+        // half-res look is indistinguishable from full-res.
+        dustWidth = Math.max(1, canvas.width >> 1);
+        dustHeight = Math.max(1, canvas.height >> 1);
         dustBuf = new Float32Array(dustWidth * dustHeight * 3);
         // Color field sized at chapter-cell scale.
         colorCellPx = Math.max(4, COLOR_CELL_PX * dpr);
@@ -1150,33 +1167,47 @@
         }
       }
 
-      // Splat a "crystallized" particle into the dust buffer. Dust is a
-      // float-RGB layer that fades much more slowly than live ink, so it
-      // builds up over a session into a record of where strokes settled.
+      // Splat a "crystallized" particle into the dust buffer (half-res).
+      // Coordinates are halved on entry; sprite footprint is halved too,
+      // so each dust splat touches ~1/4 the pixels of a live splat. Dust
+      // accumulation is capped at 255 so old splats don't keep climbing
+      // float ranges and forcing slow denormal arithmetic.
       function splatDust(x, y, r, g, b, alpha) {
         const W = dustWidth;
         const H = dustHeight;
-        const half = (SPRITE_SIZE - 1) / 2;
-        const sX0 = Math.floor(x - half);
-        const sY0 = Math.floor(y - half);
+        // Sprite is half-size in dust space — every 2 sprite pixels map
+        // to 1 dust pixel.
+        const halfSpriteHalf = (SPRITE_SIZE >> 1) >> 1; // 4 at SPRITE_SIZE=16
+        const cx = x * 0.5;
+        const cy = y * 0.5;
+        const sX0 = Math.floor(cx - halfSpriteHalf);
+        const sY0 = Math.floor(cy - halfSpriteHalf);
+        const span = SPRITE_SIZE >> 1;  // 8
         const ix0 = Math.max(0, sX0);
         const iy0 = Math.max(0, sY0);
-        const ix1 = Math.min(W, sX0 + SPRITE_SIZE);
-        const iy1 = Math.min(H, sY0 + SPRITE_SIZE);
+        const ix1 = Math.min(W, sX0 + span);
+        const iy1 = Math.min(H, sY0 + span);
         if (ix0 >= ix1 || iy0 >= iy1) return;
         const af = alpha / 255;
         for (let yy = iy0; yy < iy1; yy += 1) {
-          const sy = yy - sY0;
-          const srcRow = sy * SPRITE_SIZE;
+          // Map dust-pixel y to sprite-pixel y (×2).
+          const sySprite = (yy - sY0) << 1;
+          const srcRow = sySprite * SPRITE_SIZE;
           const dstRowBase = yy * W * 3;
           for (let xx = ix0; xx < ix1; xx += 1) {
-            const sx = xx - sX0;
-            const sw = spriteAlpha[srcRow + sx] * af / 255;
+            const sxSprite = (xx - sX0) << 1;
+            const sw = spriteAlpha[srcRow + sxSprite] * af / 255;
             if (sw <= 0) continue;
             const idx = dstRowBase + xx * 3;
-            dustBuf[idx]     += r * sw;
-            dustBuf[idx + 1] += g * sw;
-            dustBuf[idx + 2] += b * sw;
+            let nr = dustBuf[idx]     + r * sw;
+            let ng = dustBuf[idx + 1] + g * sw;
+            let nb = dustBuf[idx + 2] + b * sw;
+            if (nr > 255) nr = 255;
+            if (ng > 255) ng = 255;
+            if (nb > 255) nb = 255;
+            dustBuf[idx]     = nr;
+            dustBuf[idx + 1] = ng;
+            dustBuf[idx + 2] = nb;
           }
         }
       }
@@ -1260,25 +1291,50 @@
           rebuildParticleGrid(attractR);
         }
 
-        // Fade the live-ink image buffer (the multiplicative trail fade
-        // for the bright glowing layer).
-        const fadeFix = Math.pow(ch.fadeAlpha, dt * 60);
-        const fadeQ = Math.max(0, Math.min(256, Math.floor(fadeFix * 256)));
-        for (let i = 0, n = imageBuf.length; i < n; i += 4) {
-          imageBuf[i]     = (imageBuf[i]     * fadeQ) >> 8;
-          imageBuf[i + 1] = (imageBuf[i + 1] * fadeQ) >> 8;
-          imageBuf[i + 2] = (imageBuf[i + 2] * fadeQ) >> 8;
+        // Step 1: fade dust at its own (slow) rate — done in a single
+        // pass over the half-resolution dust buffer, ~1/4 the cost of
+        // the full-canvas pass.
+        if (dustBuf) {
+          for (let q = 0, n = dustBuf.length; q < n; q += 1) {
+            dustBuf[q] *= dustFadeF;
+          }
         }
 
-        // Fade the dust layer at its (much slower) rate.
+        // Step 2: fade live ink + composite (half-res) dust into it.
+        // We walk imageBuf row by row; for each row pair (2 imageBuf
+        // rows = 1 dustBuf row) we cache the dust-row pointer once.
+        const fadeFix = Math.pow(ch.fadeAlpha, dt * 60);
+        const fadeQ = Math.max(0, Math.min(256, Math.floor(fadeFix * 256)));
         if (dustBuf) {
-          for (let i = 0, n = dustBuf.length; i < n; i += 1) {
-            dustBuf[i] *= dustFadeF;
+          const W = canvas.width;
+          const H = canvas.height;
+          const dW = dustWidth;
+          for (let y = 0; y < H; y += 1) {
+            const dy = y >> 1;
+            const dRowBase = dy * dW * 3;
+            const pRowBase = y * W * 4;
+            let p = pRowBase;
+            for (let x = 0; x < W; x += 1, p += 4) {
+              const dx = x >> 1;
+              const q = dRowBase + dx * 3;
+              const r = ((imageBuf[p]     * fadeQ) >> 8) + (dustBuf[q]     | 0);
+              const g = ((imageBuf[p + 1] * fadeQ) >> 8) + (dustBuf[q + 1] | 0);
+              const b = ((imageBuf[p + 2] * fadeQ) >> 8) + (dustBuf[q + 2] | 0);
+              imageBuf[p]     = r > 255 ? 255 : r;
+              imageBuf[p + 1] = g > 255 ? 255 : g;
+              imageBuf[p + 2] = b > 255 ? 255 : b;
+            }
+          }
+        } else {
+          for (let i = 0, n = imageBuf.length; i < n; i += 4) {
+            imageBuf[i]     = (imageBuf[i]     * fadeQ) >> 8;
+            imageBuf[i + 1] = (imageBuf[i + 1] * fadeQ) >> 8;
+            imageBuf[i + 2] = (imageBuf[i + 2] * fadeQ) >> 8;
           }
         }
 
         // Fade the colour field so old colour opinions decay back toward
-        // neutral once no ink sustains them.
+        // neutral once no ink sustains them. (Tiny — ~6K cells.)
         if (colorField) {
           for (let i = 0, n = colorField.length; i < n; i += 1) {
             colorField[i] *= colorFadeF;
@@ -1424,18 +1480,7 @@
           i += 1;
         }
 
-        // Composite dust into the image buffer additively. Dust is fixed
-        // permanent-feeling brightness on top of the fading live ink.
-        if (dustBuf) {
-          for (let p = 0, q = 0, n = imageBuf.length; p < n; p += 4, q += 3) {
-            const r = imageBuf[p]     + (dustBuf[q]     | 0);
-            const g = imageBuf[p + 1] + (dustBuf[q + 1] | 0);
-            const b = imageBuf[p + 2] + (dustBuf[q + 2] | 0);
-            imageBuf[p]     = r > 255 ? 255 : r;
-            imageBuf[p + 1] = g > 255 ? 255 : g;
-            imageBuf[p + 2] = b > 255 ? 255 : b;
-          }
-        }
+        // (Dust fade + composite happened in the combined pass above.)
 
         // Cursor stroke spawn (paint mode) or ambient spawn (gather mode).
         if (gather) {
