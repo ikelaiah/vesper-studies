@@ -441,7 +441,7 @@
   <section class="story-panel" aria-live="polite">
     <p class="chapter-kicker" id="chapterKicker">Introduction</p>
     <h1 id="chapterTitle">Dusk Flight</h1>
-    <p id="chapterText">A few hundred birds drift across the sky together, each watching only its nearest neighbours. Move your cursor to coax them closer; hold to scare them off; tap to plant a meeting point.</p>
+    <p id="chapterText">A few hundred birds drift across the sky together, each watching its neighbours. A lone hawk circles above. Hover to coax the flock; hold to shield them from the hawk; tap to plant a meeting point.</p>
     <div class="chapter-actions" aria-label="Chapter navigation">
       <button id="prevChapterBtn" type="button">Prev</button>
       <div class="chapter-dots" id="chapterDots" aria-label="Chapters"></div>
@@ -530,30 +530,41 @@
       // Neighbour lookup uses a spatial hash grid (cell size = perception
       // radius) so the cost is O(N · k) where k is the average occupancy
       // of a cell, instead of the naive O(N²).
+      // Per-chapter parameters. New fields:
+      //   hawkCount  — number of predator hawks (second species). Hawks are
+      //                attracted to dense bird regions and dive on isolated
+      //                birds; birds panic from hawks much harder than from
+      //                the cursor.
+      //   holdMode   — "protect" (default): holding the cursor pushes hawks
+      //                away and shelters nearby birds. "hunt": holding the
+      //                cursor pulls the nearest hawk toward the cursor like
+      //                a falconer's lure, so YOU drive the attack.
       const chapters = [
         {
           kicker: "Introduction",
           title: "Dusk Flight",
-          text: "A few hundred birds drift across the sky together, each watching only its nearest neighbours. Move your cursor to coax them closer; hold to scare them off; tap to plant a meeting point.",
+          text: "A few hundred birds drift across the sky together, each watching its neighbours. A lone hawk circles above. Hover to coax the flock; hold to shield them from the hawk; tap to plant a meeting point.",
           palette: "Cosmic",
           fade: 0.040,
           count: 300,
-          perceptRadius: 60,    // px — how far each bird sees
-          sepRadius: 18,        // px — closer than this and separation kicks in
-          maxSpeed: 130,        // px/s
+          perceptRadius: 60,
+          sepRadius: 18,
+          maxSpeed: 130,
           minSpeed: 70,
           wSeparation: 1.6,
           wAlignment:  1.0,
           wCohesion:   0.9,
-          wAttract:    0.45,    // hover attraction toward cursor
-          panicRadius: 110,     // hold-LMB repulsion takes effect within this
+          wAttract:    0.45,
+          panicRadius: 110,
           panicStrength: 4.5,
+          hawkCount: 1,
+          holdMode: "protect",
           seed: 1
         },
         {
           kicker: "Chapter 1",
           title: "The Tight Pack",
-          text: "Birds want to stay close. They clump into a single moving knot, eddying around itself. Hold to break the knot open; release and they rejoin within seconds.",
+          text: "Birds clump into a single moving knot. Two hawks press the knot from opposite sides, hunting for stragglers. Hold the cursor over the flock to shelter it.",
           palette: "Ocean",
           fade: 0.050,
           count: 260,
@@ -567,12 +578,14 @@
           wAttract:    0.50,
           panicRadius: 100,
           panicStrength: 5.0,
+          hawkCount: 2,
+          holdMode: "protect",
           seed: 2
         },
         {
           kicker: "Chapter 2",
           title: "The Wary Flock",
-          text: "The birds are jumpy. They scatter at the smallest disturbance, regather slowly. Holding the cursor near them ripples outward like wind through grass.",
+          text: "Three hawks. The birds are jumpy — every shadow is a threat. Holding the cursor casts a shelter the flock fights to stay inside.",
           palette: "Aurora",
           fade: 0.045,
           count: 290,
@@ -586,12 +599,14 @@
           wAttract:    0.30,
           panicRadius: 170,
           panicStrength: 6.0,
+          hawkCount: 3,
+          holdMode: "protect",
           seed: 3
         },
         {
           kicker: "Chapter 3",
-          title: "Predator Garden",
-          text: "The cursor is both seed and storm. Birds swirl around your pointer wherever it rests; hold to scatter them violently; they re-form the orbit as soon as you let go.",
+          title: "Falconer's Hand",
+          text: "You are the hunter. Four hawks ride the wind; hold the cursor and the nearest one dives toward your pointer. Tap to drop a lure the flock will gather around — bait for the hawks.",
           palette: "Fire",
           fade: 0.038,
           count: 320,
@@ -602,15 +617,17 @@
           wSeparation: 1.4,
           wAlignment:  1.1,
           wCohesion:   1.0,
-          wAttract:    1.3,
+          wAttract:    0.30,
           panicRadius: 130,
           panicStrength: 6.5,
+          hawkCount: 4,
+          holdMode: "hunt",
           seed: 4
         },
         {
           kicker: "Ending",
           title: "Last Light",
-          text: "The flock thins. The birds left behind move slowly, drifting in twos and threes. Tap once to give them a place to gather as the light leaves the page.",
+          text: "The hawks are gone. A few birds remain, drifting in twos and threes. Tap to give them a place to gather as the light leaves the page.",
           palette: "Forest",
           fade: 0.060,
           count: 120,
@@ -624,6 +641,8 @@
           wAttract:    0.55,
           panicRadius: 90,
           panicStrength: 3.0,
+          hawkCount: 0,
+          holdMode: "protect",
           seed: 5
         }
       ];
@@ -668,6 +687,20 @@
       const TRAIL_HUE_BUCKETS = 8;
       const TRAIL_BUCKET_COUNT = TRAIL_ALPHA_BANDS * TRAIL_HUE_BUCKETS;
       let n = 0;  // active bird count
+
+      // Hawks (second species). Far fewer of them than birds, so plain
+      // arrays-of-objects are fine — they're not in the hot inner loop.
+      // Each hawk is { x, y, vx, vy, trail[] }. Hawks fly faster, turn
+      // slower, and steer toward dense bird regions; on close contact
+      // with a bird they "take" it (the bird is removed from the flock
+      // and a brief feather puff is drawn).
+      const HAWK_PANIC_RADIUS = 130; // px — birds within this of any hawk flee hard
+      const HAWK_STRIKE_RADIUS = 12; // px — closer than this and a bird is taken
+      const HAWK_TRAIL_LEN = 24;
+      const hawks = [];
+
+      // Feather puffs from successful strikes. Each is { x, y, hue, startedAt, ttl }.
+      const puffs = [];
 
       // Spatial hash grid. Cell size = perception radius, rebuilt each
       // frame from current bird positions. `gridCell` lists which cell
@@ -788,7 +821,37 @@
       function loadChapter() {
         internalT = 0;
         seed.active = false;
+        puffs.length = 0;
         initBoids();
+        initHawks();
+      }
+
+      function initHawks() {
+        hawks.length = 0;
+        const ch = currentChapter();
+        const w = canvas.width;
+        const h = canvas.height;
+        if (w === 0 || h === 0) return;
+        const rng = mulberry32(ch.seed * 7919 + 17);
+        for (let i = 0; i < (ch.hawkCount || 0); i += 1) {
+          const ang = rng() * Math.PI * 2;
+          const sp = 200 * dpr;
+          hawks.push({
+            x: rng() * w,
+            y: rng() * h,
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp,
+            trail: new Float32Array(HAWK_TRAIL_LEN * 2),
+            trailHead: 0,
+            trailFilled: false
+          });
+          // Prime the trail at start position so first frames render cleanly.
+          const last = hawks[hawks.length - 1];
+          for (let k = 0; k < HAWK_TRAIL_LEN; k += 1) {
+            last.trail[k * 2]     = last.x;
+            last.trail[k * 2 + 1] = last.y;
+          }
+        }
       }
 
       function initBoids() {
@@ -862,20 +925,25 @@
         octx.fill();
         octx.restore();
 
-        // Ridge marker: a small horizontal bar under the cursor showing
-        // where sculpting is being applied. Only visible during sculpt
-        // (i.e. once the user has moved enough that it isn't a tap).
-        if (pointer.moved > TAP_MAX_MOVE_PX) {
-          const w = 60 * dpr;
+        // While the cursor is held, draw a thin ring to show the shelter /
+        // lure radius. In protect mode this is where the flock is safe and
+        // hawks are pushed away; in hunt mode it's where a hawk is being
+        // pulled toward you.
+        if (pointer.active) {
+          const ch = currentChapter();
+          const isHunt = ch.holdMode === "hunt";
+          const ringR = (isHunt ? 90 : 110) * dpr;
           octx.save();
           octx.globalCompositeOperation = "lighter";
-          octx.strokeStyle = `hsla(${hue}, ${palette.sat}, 78%, 0.55)`;
-          octx.lineWidth = 2 * dpr;
-          octx.lineCap = "round";
+          octx.strokeStyle = isHunt
+            ? `hsla(${hue}, ${palette.sat}, 78%, 0.55)`
+            : `rgba(245, 235, 220, 0.45)`;
+          octx.lineWidth = 1.2 * dpr;
+          octx.setLineDash([6 * dpr, 6 * dpr]);
           octx.beginPath();
-          octx.moveTo(pointer.x - w * 0.5, pointer.y);
-          octx.lineTo(pointer.x + w * 0.5, pointer.y);
+          octx.arc(pointer.x, pointer.y, ringR, 0, Math.PI * 2);
           octx.stroke();
+          octx.setLineDash([]);
           octx.restore();
         }
       }
@@ -1076,6 +1144,34 @@
             }
           }
 
+          // Hawks: any hawk within HAWK_PANIC_RADIUS makes the bird flee.
+          // This is independent of cursor panic and much stronger — a hawk
+          // overhead is the most dangerous thing in a bird's world. Birds
+          // sheltered by the cursor (hold + protect mode) get a damped
+          // hawk-fear so they don't keep fleeing out of the shelter.
+          if (hawks.length > 0) {
+            const hawkPanicSq = (HAWK_PANIC_RADIUS * dpr) * (HAWK_PANIC_RADIUS * dpr);
+            // "Sheltered" if hold is active in protect mode and bird is
+            // inside the cursor's panic radius (reused as shelter radius).
+            const sheltered = panic && ch.holdMode !== "hunt"
+              && ((xi - px) * (xi - px) + (yi - py) * (yi - py)) < panicRSq;
+            const fearScale = sheltered ? 0.25 : 1.0;
+            for (let hi = 0; hi < hawks.length; hi += 1) {
+              const hawk = hawks[hi];
+              const dxh = xi - hawk.x;
+              const dyh = yi - hawk.y;
+              const dh2 = dxh * dxh + dyh * dyh;
+              if (dh2 < hawkPanicSq && dh2 > 0.0001) {
+                const dh = Math.sqrt(dh2);
+                const falloff = 1 - dh / (HAWK_PANIC_RADIUS * dpr);
+                const fx = (dxh / dh) * 10.0 * maxSpeed * falloff * fearScale;
+                const fy = (dyh / dh) * 10.0 * maxSpeed * falloff * fearScale;
+                ax += fx;
+                ay += fy;
+              }
+            }
+          }
+
           // Seed attractor (tap-placed).
           if (seed.active) {
             const sAge = (renderClock - seed.startedAt) / seed.ttl;
@@ -1151,6 +1247,175 @@
           trailXY[base]     = rx;
           trailXY[base + 1] = ry;
           trailHead[i] = (h0 + 1) % TRAIL_LEN;
+        }
+
+        // Hawks update. Hawks steer toward the densest local bird region
+        // (sample the grid around them and pick the cell with the most
+        // birds within range), then dive on close birds. Cursor influence
+        // depends on chapter.holdMode: "protect" pushes hawks away from
+        // a held cursor; "hunt" pulls the nearest hawk toward it.
+        if (hawks.length > 0) {
+          const hawkMaxSpeed = 220 * dpr;
+          const hawkMinSpeed = 110 * dpr;
+          const hawkMaxForce = 220 * dpr;
+          const strikeR2 = (HAWK_STRIKE_RADIUS * dpr) * (HAWK_STRIKE_RADIUS * dpr);
+          const isHunt = ch.holdMode === "hunt";
+          // For hunt mode: which hawk is closest to the cursor?
+          let huntTargetIdx = -1;
+          if (isHunt && pointer.active) {
+            let bestD2 = Infinity;
+            for (let hi = 0; hi < hawks.length; hi += 1) {
+              const hk = hawks[hi];
+              const dx2 = hk.x - px, dy2 = hk.y - py;
+              const d2 = dx2 * dx2 + dy2 * dy2;
+              if (d2 < bestD2) { bestD2 = d2; huntTargetIdx = hi; }
+            }
+          }
+
+          for (let hi = 0; hi < hawks.length; hi += 1) {
+            const hk = hawks[hi];
+            // Find the nearest bird as the dive target.
+            let tx = 0, ty = 0, found = false, bestD2 = Infinity;
+            const ccx = Math.min(gridCols - 1, Math.max(0, (hk.x / cellSize) | 0));
+            const ccy = Math.min(gridRows - 1, Math.max(0, (hk.y / cellSize) | 0));
+            // Hawks see further than birds — sweep a 5×5.
+            for (let dcy = -2; dcy <= 2; dcy += 1) {
+              for (let dcx = -2; dcx <= 2; dcx += 1) {
+                const cxN = ccx + dcx, cyN = ccy + dcy;
+                if (cxN < 0 || cxN >= gridCols || cyN < 0 || cyN >= gridRows) continue;
+                let j = gridStart[cyN * gridCols + cxN];
+                while (j !== -1) {
+                  const dxb = bx[j] - hk.x;
+                  const dyb = by[j] - hk.y;
+                  const d2 = dxb * dxb + dyb * dyb;
+                  if (d2 < bestD2) { bestD2 = d2; tx = bx[j]; ty = by[j]; found = true; }
+                  j = gridNext[j];
+                }
+              }
+            }
+
+            let hax = 0, hay = 0;
+            if (found) {
+              const dxv = tx - hk.x;
+              const dyv = ty - hk.y;
+              const m = Math.hypot(dxv, dyv) || 1;
+              const desiredVx = (dxv / m) * hawkMaxSpeed;
+              const desiredVy = (dyv / m) * hawkMaxSpeed;
+              hax += (desiredVx - hk.vx) * 1.2;
+              hay += (desiredVy - hk.vy) * 1.2;
+            }
+
+            // Cursor effect.
+            if (pointer.active && panic) {
+              const dxc = hk.x - px;
+              const dyc = hk.y - py;
+              const d2 = dxc * dxc + dyc * dyc;
+              const protectR = 180 * dpr;
+              if (isHunt) {
+                if (hi === huntTargetIdx) {
+                  // Lure: strong pull toward cursor for the chosen hawk.
+                  const dpx = px - hk.x;
+                  const dpy = py - hk.y;
+                  const m = Math.hypot(dpx, dpy) || 1;
+                  hax += ((dpx / m) * hawkMaxSpeed - hk.vx) * 3.0;
+                  hay += ((dpy / m) * hawkMaxSpeed - hk.vy) * 3.0;
+                }
+              } else if (d2 < protectR * protectR && d2 > 0.0001) {
+                // Protect: push hawk away from held cursor.
+                const d = Math.sqrt(d2);
+                const falloff = 1 - d / protectR;
+                hax += (dxc / d) * 8.0 * hawkMaxSpeed * falloff;
+                hay += (dyc / d) * 8.0 * hawkMaxSpeed * falloff;
+              }
+            }
+
+            // Cap force.
+            const amag = Math.hypot(hax, hay);
+            if (amag > hawkMaxForce) {
+              const k = hawkMaxForce / amag;
+              hax *= k; hay *= k;
+            }
+
+            hk.vx += hax * dtSec;
+            hk.vy += hay * dtSec;
+
+            // Clamp speed.
+            const sp = Math.hypot(hk.vx, hk.vy);
+            if (sp > hawkMaxSpeed) {
+              const k = hawkMaxSpeed / sp; hk.vx *= k; hk.vy *= k;
+            } else if (sp < hawkMinSpeed && sp > 0.001) {
+              const k = hawkMinSpeed / sp; hk.vx *= k; hk.vy *= k;
+            }
+
+            // Move + wrap.
+            hk.x += hk.vx * dtSec;
+            hk.y += hk.vy * dtSec;
+            if (hk.x < 0) hk.x += W; else if (hk.x >= W) hk.x -= W;
+            if (hk.y < 0) hk.y += H; else if (hk.y >= H) hk.y -= H;
+
+            // Push trail.
+            hk.trail[hk.trailHead * 2]     = hk.x;
+            hk.trail[hk.trailHead * 2 + 1] = hk.y;
+            hk.trailHead = (hk.trailHead + 1) % HAWK_TRAIL_LEN;
+
+            // Strike: any bird within strike radius is taken.
+            if (n > 0) {
+              for (let bi = n - 1; bi >= 0; bi -= 1) {
+                const dxs = bx[bi] - hk.x;
+                const dys = by[bi] - hk.y;
+                if (dxs * dxs + dys * dys < strikeR2) {
+                  const hue = (baseHue + (renderClock * 14 + bhue[bi]) % hRange + 360) % 360;
+                  puffs.push({ x: bx[bi], y: by[bi], hue, startedAt: renderClock, ttl: 0.9 });
+                  // Swap-remove the bird from the active range.
+                  const last = n - 1;
+                  if (bi !== last) {
+                    bx[bi]   = bx[last];   by[bi]   = by[last];
+                    bvx[bi]  = bvx[last];  bvy[bi]  = bvy[last];
+                    bhue[bi] = bhue[last];
+                    // Copy trail entries too — both wings.
+                    for (let wing = 0; wing < 2; wing += 1) {
+                      for (let k = 0; k < TRAIL_LEN; k += 1) {
+                        const dst = (((bi   * 2) + wing) * TRAIL_LEN + k) * 2;
+                        const src = (((last * 2) + wing) * TRAIL_LEN + k) * 2;
+                        trailXY[dst]     = trailXY[src];
+                        trailXY[dst + 1] = trailXY[src + 1];
+                      }
+                    }
+                    trailHead[bi] = trailHead[last];
+                  }
+                  n = last;
+                  break; // one strike per hawk per frame
+                }
+              }
+            }
+          }
+        }
+
+        // Replenish the flock. Hawks take birds; without replenishment a
+        // long session would empty the canvas. Spawn at a random edge with
+        // a small probability per frame, but only while we're below the
+        // chapter's target count and not in the Last Light ending.
+        if (ch.hawkCount > 0 && n < Math.floor(ch.count * 0.92) && n < MAX_BOIDS) {
+          if (Math.random() < 0.08) {
+            const edge = (Math.random() * 4) | 0;
+            const i = n;
+            const palette = currentPalette();
+            const sp = (ch.minSpeed + Math.random() * (ch.maxSpeed - ch.minSpeed)) * dpr;
+            if (edge === 0)      { bx[i] = 0;       by[i] = Math.random() * H; bvx[i] =  sp; bvy[i] = (Math.random() - 0.5) * sp; }
+            else if (edge === 1) { bx[i] = W - 1;   by[i] = Math.random() * H; bvx[i] = -sp; bvy[i] = (Math.random() - 0.5) * sp; }
+            else if (edge === 2) { bx[i] = Math.random() * W; by[i] = 0;       bvx[i] = (Math.random() - 0.5) * sp; bvy[i] =  sp; }
+            else                  { bx[i] = Math.random() * W; by[i] = H - 1;   bvx[i] = (Math.random() - 0.5) * sp; bvy[i] = -sp; }
+            bhue[i] = (Math.random() - 0.5) * palette.hRange * 0.5;
+            for (let wing = 0; wing < 2; wing += 1) {
+              for (let k = 0; k < TRAIL_LEN; k += 1) {
+                const base = (((i * 2) + wing) * TRAIL_LEN + k) * 2;
+                trailXY[base]     = bx[i];
+                trailXY[base + 1] = by[i];
+              }
+            }
+            trailHead[i] = 0;
+            n = i + 1;
+          }
         }
 
         // Wake layer: a tiny per-bird dot painted into the trail buffer at
@@ -1263,6 +1528,92 @@
           octx.lineTo(t2x, t2y);
           octx.closePath();
           octx.fill();
+        }
+
+        // Hawks: draw trail (a single thick fading line) then body (a larger,
+        // darker, sharper silhouette than the birds — same wing-triangle
+        // shape but bigger and rendered in a near-white/contrasty colour so
+        // the eye instantly registers it as different from the flock).
+        if (hawks.length > 0) {
+          octx.lineCap = "round";
+          octx.lineWidth = 1.6 * dpr;
+          for (let hi = 0; hi < hawks.length; hi += 1) {
+            const hk = hawks[hi];
+            // Trail: walk from oldest → newest, fading alpha.
+            let prevX = hk.trail[hk.trailHead * 2];
+            let prevY = hk.trail[hk.trailHead * 2 + 1];
+            for (let k = 1; k < HAWK_TRAIL_LEN; k += 1) {
+              const idx = (hk.trailHead + k) % HAWK_TRAIL_LEN;
+              const cx2 = hk.trail[idx * 2];
+              const cy2 = hk.trail[idx * 2 + 1];
+              const dx = cx2 - prevX;
+              const dy = cy2 - prevY;
+              if (Math.abs(dx) < W * 0.4 && Math.abs(dy) < H * 0.4) {
+                const tk = k / HAWK_TRAIL_LEN;
+                const a = tk * tk * 0.55;
+                octx.strokeStyle = `rgba(245, 235, 220, ${a})`;
+                octx.beginPath();
+                octx.moveTo(prevX, prevY);
+                octx.lineTo(cx2, cy2);
+                octx.stroke();
+              }
+              prevX = cx2;
+              prevY = cy2;
+            }
+            // Hawk body: larger wing-triangle, off-white.
+            const vmag = Math.hypot(hk.vx, hk.vy) || 1;
+            const ux = hk.vx / vmag;
+            const uy = hk.vy / vmag;
+            const bodyLen = 14 * dpr;
+            const bodyWide = 16 * dpr;
+            const hx = hk.x + ux * bodyLen;
+            const hy = hk.y + uy * bodyLen;
+            const t1x = hk.x - ux * bodyLen * 0.5 + (-uy) * bodyWide;
+            const t1y = hk.y - uy * bodyLen * 0.5 + ( ux) * bodyWide;
+            const t2x = hk.x - ux * bodyLen * 0.5 - (-uy) * bodyWide;
+            const t2y = hk.y - uy * bodyLen * 0.5 - ( ux) * bodyWide;
+            octx.fillStyle = "rgba(252, 248, 235, 0.96)";
+            octx.beginPath();
+            octx.moveTo(hx, hy);
+            octx.lineTo(t1x, t1y);
+            octx.lineTo(t2x, t2y);
+            octx.closePath();
+            octx.fill();
+            // Thin outline so the hawk stays legible against a bright sky.
+            octx.strokeStyle = "rgba(20, 14, 8, 0.55)";
+            octx.lineWidth = 1.0 * dpr;
+            octx.stroke();
+          }
+        }
+
+        // Feather puffs from successful strikes — short-lived expanding ring.
+        if (puffs.length > 0) {
+          octx.lineCap = "round";
+          for (let i = puffs.length - 1; i >= 0; i -= 1) {
+            const p = puffs[i];
+            const age = (renderClock - p.startedAt) / p.ttl;
+            if (age >= 1) { puffs.splice(i, 1); continue; }
+            const r = (4 + age * 26) * dpr;
+            const a = (1 - age) * 0.7;
+            octx.strokeStyle = `hsla(${p.hue}, 80%, 78%, ${a})`;
+            octx.lineWidth = 1.4 * dpr;
+            octx.beginPath();
+            octx.arc(p.x, p.y, r, 0, Math.PI * 2);
+            octx.stroke();
+            // A few short radial flecks for the "feathers".
+            const flecks = 6;
+            octx.strokeStyle = `hsla(${p.hue}, 80%, 86%, ${a * 0.9})`;
+            octx.lineWidth = 0.9 * dpr;
+            octx.beginPath();
+            for (let k = 0; k < flecks; k += 1) {
+              const ang = (k / flecks) * Math.PI * 2 + age * 1.2;
+              const r0 = r * 0.85;
+              const r1 = r * (1.1 + age * 0.3);
+              octx.moveTo(p.x + Math.cos(ang) * r0, p.y + Math.sin(ang) * r0);
+              octx.lineTo(p.x + Math.cos(ang) * r1, p.y + Math.sin(ang) * r1);
+            }
+            octx.stroke();
+          }
         }
 
         drawPointerGlow();

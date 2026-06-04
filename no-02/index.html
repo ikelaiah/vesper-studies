@@ -441,7 +441,7 @@
   <section class="story-panel" aria-live="polite">
     <p class="chapter-kicker" id="chapterKicker">Introduction</p>
     <h1 id="chapterTitle">Slow Bloom</h1>
-    <p id="chapterText">Two pendulums share a single pen. They begin with a quiet ratio of three against two, and the line opens into a wide, breathing rose.</p>
+    <p id="chapterText">A field of pendulums hangs quiet. Grab a handful with the cursor, drag them aside, release. Their neighbours feel the pull through a soft coupling, and the disturbance breathes outward as gentle phase domains.</p>
     <div class="chapter-actions" aria-label="Chapter navigation">
       <button id="prevChapterBtn" type="button">Prev</button>
       <div class="chapter-dots" id="chapterDots" aria-label="Chapters"></div>
@@ -519,11 +519,18 @@
       // and visual palette. Bobs swing under gravity; LMB-hold pulls them
       // toward the cursor; release fires a radial impulse on their angular
       // velocity that scatters the field, after which gravity reels them home.
+      // Each chapter tunes the field's shape (grid layout), physics (gravity,
+      // damping, length distribution, neighbour coupling), and visual palette.
+      // `coupling` is the Kuramoto-style sin-difference torque between grid
+      // neighbours — higher values mean disturbances ripple outward and the
+      // field tends to form synchronised phase domains. Pendulum Wave keeps
+      // coupling at zero so the length progression is allowed to express
+      // itself as the classroom-demo travelling wave.
       const chapters = [
         {
           kicker: "Introduction",
           title: "Slow Bloom",
-          text: "A field of pendulums hangs quiet. They begin with long strings and a soft gravity, swaying in lazy unison until the smallest disturbance fans them apart.",
+          text: "A field of pendulums hangs quiet. Grab a handful with the cursor, drag them aside, release. Their neighbours feel the pull through a soft coupling, and the disturbance breathes outward as gentle phase domains.",
           palette: "Cosmic",
           fade: 0.036,
           cols: 16, rows: 9,
@@ -532,13 +539,14 @@
           gravity: 1.7,
           damp: 0.0035,
           tiltX: 0,
+          coupling: 0.9,
           seed: 1,
           mode: "uniform"
         },
         {
           kicker: "Chapter 1",
           title: "Lacework",
-          text: "Short strings, tighter spacing. The bobs swing faster and their trails weave into one another like fine lace caught in a breeze.",
+          text: "Short strings, tighter spacing, stronger coupling. Pluck one bob and a ripple races outward through the lace; the field weaves itself into travelling phase fronts before settling.",
           palette: "Ocean",
           fade: 0.044,
           cols: 22, rows: 12,
@@ -547,13 +555,14 @@
           gravity: 2.8,
           damp: 0.0045,
           tiltX: 0,
+          coupling: 1.6,
           seed: 2,
           mode: "uniform"
         },
         {
           kicker: "Chapter 2",
           title: "Drift",
-          text: "Gravity leans. The whole field swings off-axis, each bob carving a long oval that walks slowly sideways across the page.",
+          text: "Gravity leans. Coupling is faint, so each bob carves its own slow oval that walks sideways across the page — domains form briefly and dissolve again.",
           palette: "Aurora",
           fade: 0.036,
           cols: 18, rows: 10,
@@ -562,13 +571,14 @@
           gravity: 2.2,
           damp: 0.0025,
           tiltX: 0.45,
+          coupling: 0.35,
           seed: 3,
           mode: "uniform"
         },
         {
           kicker: "Chapter 3",
           title: "Pendulum Wave",
-          text: "Strings tuned in an arithmetic progression. The field aligns, scatters into a travelling wave, gathers, scatters again — the same trick the classroom physics demo plays, in two dimensions.",
+          text: "Strings tuned in an arithmetic progression and coupling held to zero. The lengths alone do the work — the field aligns, scatters into a travelling wave, gathers, scatters again.",
           palette: "Fire",
           fade: 0.040,
           cols: 24, rows: 14,
@@ -577,13 +587,14 @@
           gravity: 3.0,
           damp: 0.0010,
           tiltX: 0,
+          coupling: 0.0,
           seed: 4,
           mode: "wave"
         },
         {
           kicker: "Ending",
           title: "Settling",
-          text: "Damping rises. Each swing is smaller than the last. One by one the bobs come to rest, until the field is still and the page is dark.",
+          text: "Damping rises and coupling climbs with it. As the field loses energy the bobs lock into synchrony, swinging together more and more quietly until the page is still.",
           palette: "Forest",
           fade: 0.056,
           cols: 16, rows: 9,
@@ -592,6 +603,7 @@
           gravity: 2.0,
           damp: 0.018,
           tiltX: 0,
+          coupling: 2.2,
           seed: 5,
           mode: "uniform"
         }
@@ -628,24 +640,33 @@
         };
       }
 
+      // Pointer state. `prevX/prevY` are the cursor position on the previous
+      // frame so we can compute the cursor's instantaneous velocity for
+      // pluck-release flicks.
       const pointer = {
         active: false,
         x: 0,
         y: 0,
+        prevX: 0,
+        prevY: 0,
+        vx: 0,  // px/sec, smoothed
+        vy: 0,
         pressedAt: 0
       };
 
-      const burst = {
-        active: false,
-        x: 0,
-        y: 0,
-        startedAt: 0,
-        duration: 520,
-        radius: 0,
-        hue: 0
-      };
+      // Indices of bobs currently held by the cursor. Held bobs ignore
+      // pendulum physics — their angle is driven directly by the cursor
+      // offset. Released bobs receive the cursor's tangential velocity as
+      // angular impulse and re-enter physics.
+      const held = [];
+      const GRAB_RADIUS_PX = 110;   // how far around the cursor we grab
+      const MAX_GRABBED = 14;       // cap so a click in a dense region doesn't seize the whole field
+      const MAX_PLUCK_ANGLE = 1.25; // ~72° — how far we'll let the cursor stretch a bob from rest
 
-      const BURST_MAX_HOLD_MS = 900;
+      // Released-bob flash: a brief bright pulse on each bob the moment its
+      // grip releases, so you can see what you flicked.
+      const flashUntil = new Map();  // bob index -> performance.now() ms
+      const FLASH_DURATION_MS = 380;
 
       function currentChapter() { return chapters[currentChapterIndex]; }
       function currentPalette() { return palettes[paletteIndex]; }
@@ -695,6 +716,8 @@
 
       function loadChapter() {
         internalT = 0;
+        held.length = 0;
+        flashUntil.clear();
         initBobs();
       }
 
@@ -753,10 +776,26 @@
               omega: omega0,
               hueOff: lenHueOff,
               lx: null,
-              ly: null
+              ly: null,
+              gc: c, gr: r,        // grid column/row, for neighbour lookup
+              neighbours: null     // filled in below — indices of up/down/left/right bobs
             });
             i += 1;
           }
+        }
+
+        // Wire up 4-neighbour links on the chapter grid. Each bob has at most
+        // four neighbours (up/down/left/right) — these are the partners
+        // it phase-couples with each frame. We build it once here so the
+        // hot loop is just an indexed lookup.
+        for (const b of bobs) {
+          const list = [];
+          const idxOf = (c, r) => r * cols + c;
+          if (b.gc > 0)        list.push(idxOf(b.gc - 1, b.gr));
+          if (b.gc < cols - 1) list.push(idxOf(b.gc + 1, b.gr));
+          if (b.gr > 0)        list.push(idxOf(b.gc, b.gr - 1));
+          if (b.gr < rows - 1) list.push(idxOf(b.gc, b.gr + 1));
+          b.neighbours = list;
         }
       }
 
@@ -782,17 +821,15 @@
       }
 
       function drawPointerGlow() {
-        if (!pointer.active) return;
+        if (!pointer.active && held.length === 0) return;
 
         const palette = currentPalette();
-        const radius = 130 * dpr;
+        const radius = 90 * dpr;
         const hue = (palette.hMin + hueShift) % 360;
         const glow = octx.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius);
 
-        // Higher alpha now that this draws once per frame on the overlay
-        // instead of accumulating into the trail buffer.
-        glow.addColorStop(0, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.18)`);
-        glow.addColorStop(0.6, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.06)`);
+        glow.addColorStop(0, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.16)`);
+        glow.addColorStop(0.6, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0.05)`);
         glow.addColorStop(1, `hsla(${hue}, ${palette.sat}, ${palette.lit}, 0)`);
 
         octx.save();
@@ -802,53 +839,27 @@
         octx.arc(pointer.x, pointer.y, radius, 0, Math.PI * 2);
         octx.fill();
         octx.restore();
-
-        const hold = performance.now() - pointer.pressedAt;
-        const charge = Math.min(1, hold / BURST_MAX_HOLD_MS);
-        if (charge > 0.02) {
-          const ringRadius = (18 + charge * 64) * dpr;
-          octx.save();
-          octx.globalCompositeOperation = "lighter";
-          octx.strokeStyle = `hsla(${hue}, ${palette.sat}, ${palette.lit}, ${0.45 + charge * 0.45})`;
-          octx.lineWidth = (1 + charge * 1.6) * dpr;
-          octx.beginPath();
-          octx.arc(pointer.x, pointer.y, ringRadius, 0, Math.PI * 2);
-          octx.stroke();
-          octx.restore();
-        }
       }
 
-      function drawBurstFlash() {
-        if (!burst.active) return;
-        const elapsed = performance.now() - burst.startedAt;
-        const progress = elapsed / burst.duration;
-        if (progress >= 1) {
-          burst.active = false;
-          return;
-        }
-
-        const eased = 1 - Math.pow(1 - progress, 3);
-        const radius = burst.radius * 0.42 * (0.45 + eased * 0.65);
-        // Higher alpha since the overlay redraws fresh each frame.
-        const alpha = (1 - progress) * 0.55;
+      // Filaments from the cursor to each currently-held bob. Drawn on top
+      // of strings/bobs so the pluck gesture reads as direct manipulation
+      // ("you are pulling these specific bobs aside").
+      function drawHeldFilaments() {
+        if (held.length === 0) return;
         const palette = currentPalette();
-        const flash = octx.createRadialGradient(burst.x, burst.y, 0, burst.x, burst.y, radius);
-
-        flash.addColorStop(0, `hsla(${burst.hue}, ${palette.sat}, 70%, ${alpha * 0.7})`);
-        flash.addColorStop(0.5, `hsla(${burst.hue}, ${palette.sat}, ${palette.lit}, ${alpha * 0.18})`);
-        flash.addColorStop(1, `hsla(${burst.hue}, ${palette.sat}, ${palette.lit}, 0)`);
-
+        const hue = (palette.hMin + hueShift) % 360;
         octx.save();
         octx.globalCompositeOperation = "lighter";
-        octx.fillStyle = flash;
+        octx.strokeStyle = `hsla(${hue}, ${palette.sat}, 80%, 0.55)`;
+        octx.lineWidth = 0.9 * dpr;
+        octx.lineCap = "round";
         octx.beginPath();
-        octx.arc(burst.x, burst.y, radius, 0, Math.PI * 2);
-        octx.fill();
-
-        octx.strokeStyle = `hsla(${burst.hue}, ${palette.sat}, 72%, ${(1 - progress) * 0.75})`;
-        octx.lineWidth = (0.6 + (1 - progress) * 1.2) * dpr;
-        octx.beginPath();
-        octx.arc(burst.x, burst.y, radius, 0, Math.PI * 2);
+        for (const idx of held) {
+          const b = bobs[idx];
+          if (!b || b.lx === null) continue;
+          octx.moveTo(pointer.x, pointer.y);
+          octx.lineTo(b.lx, b.ly);
+        }
         octx.stroke();
         octx.restore();
       }
@@ -871,31 +882,87 @@
         const gBase = ch.gravity * 32.0;
         const damp = ch.damp * dampMultiplier;
         const tilt = ch.tiltX;
-
-        const pullActive = pointer.active;
-        const pullRadius = 260 * dpr;
-        const pullRadiusSq = pullRadius * pullRadius;
-        const pullStrength = 0.012;
+        const coupling = ch.coupling || 0;
 
         const SUBSTEPS = 2;
         const h = dtSec / SUBSTEPS;
 
-        for (const b of bobs) {
+        // Held bobs: drive theta directly from the cursor offset relative
+        // to the pivot. This is direct manipulation — the bob hangs from
+        // the cursor position (clamped to a maximum stretch angle), rather
+        // than being tugged via a soft torque. omega is set from the
+        // change in theta so when the bob is released it carries the
+        // cursor's instantaneous velocity into its swing.
+        if (held.length > 0) {
+          for (const idx of held) {
+            const b = bobs[idx];
+            if (!b) continue;
+            const dx = pointer.x - b.px;
+            const dy = pointer.y - b.py;
+            // Target angle: where the bob would hang if its string were
+            // pinned to the cursor. atan2(dx, dy) because theta=0 means
+            // straight down (+y), and increasing theta swings +x.
+            let target = Math.atan2(dx, Math.max(0.001, dy));
+            if (target > MAX_PLUCK_ANGLE)  target = MAX_PLUCK_ANGLE;
+            if (target < -MAX_PLUCK_ANGLE) target = -MAX_PLUCK_ANGLE;
+            const prevTheta = b.theta;
+            b.theta = target;
+            // omega = d(theta)/dt — gives a flick-release the right energy.
+            if (dtSec > 0.0001) b.omega = (target - prevTheta) / dtSec;
+          }
+        }
+
+        // Free bobs: integrate normal pendulum physics plus neighbour
+        // phase coupling. Held bobs are skipped — they are driven above.
+        const heldSet = held.length > 0 ? new Set(held) : null;
+
+        for (let i = 0; i < bobs.length; i += 1) {
+          const b = bobs[i];
+          if (heldSet && heldSet.has(i)) {
+            // Still need to update the render position from the driven theta.
+            const sinT = Math.sin(b.theta);
+            const cosT = Math.cos(b.theta);
+            const rx = b.px + b.L * sinT;
+            const ry = b.py + b.L * cosT;
+            if (b.lx !== null) drawSegment(b.lx, b.ly, rx, ry, internalT, b.hueOff);
+            b.lx = rx; b.ly = ry;
+            continue;
+          }
+
           // Integrate angular motion. Semi-implicit Euler:
           //   omega += a * dt;  theta += omega * dt
           // where a = -(g / L) * sin(theta) - damp * omega + tilt * cos(theta)
+          //          + K * sum over grid-neighbours of sin(theta_j - theta_i)
+          //
+          // The coupling term is Kuramoto-style — it pulls each bob's phase
+          // toward its grid-neighbour phases. Disturbances propagate as
+          // ripples; idle regions form synchronised domains.
           //
           // Plus an over-spin brake: if |omega| exceeds the natural-swing
-          // ceiling, extra cubic damping kicks in. This stops a strong burst
-          // from flipping bobs into permanent rotation — they swing wildly
-          // for a beat, then physics reels them back to pendulum behaviour.
+          // ceiling, extra cubic damping kicks in so a flicked release
+          // can't push the bob into permanent rotation.
           const invL = 1 / b.L;
           const omegaNatural = Math.sqrt(gBase * invL);
           const omegaCap = omegaNatural * 2.8;
+
+          // Precompute coupling torque — same for both substeps (theta_j
+          // changes slowly relative to h, and recomputing per-substep is
+          // expensive). Strength scales with the natural frequency so
+          // light bobs and heavy bobs feel coupling at the same "rate".
+          let couple = 0;
+          if (coupling > 0 && b.neighbours) {
+            const k = coupling * omegaNatural * 0.6;
+            for (const nIdx of b.neighbours) {
+              const nb = bobs[nIdx];
+              if (!nb) continue;
+              couple += k * Math.sin(nb.theta - b.theta);
+            }
+          }
+
           for (let s = 0; s < SUBSTEPS; s += 1) {
             const sinT = Math.sin(b.theta);
             const cosT = Math.cos(b.theta);
-            let alpha = -gBase * invL * sinT - damp * b.omega;
+            let alpha = -gBase * invL * sinT - damp * b.omega + couple;
             if (tilt) alpha += tilt * cosT * invL * gBase * 0.4;
 
             const absOmega = Math.abs(b.omega);
@@ -903,19 +970,6 @@
               const excess = (absOmega - omegaCap) / omegaNatural;
               const brake = 3.5 * excess * excess * omegaNatural;
               alpha -= Math.sign(b.omega) * brake;
-            }
-
-            if (pullActive) {
-              const bx = b.px + b.L * sinT;
-              const by = b.py + b.L * cosT;
-              const dx = pointer.x - bx;
-              const dy = pointer.y - by;
-              const d2 = dx * dx + dy * dy;
-              if (d2 < pullRadiusSq) {
-                const falloff = 1 - Math.sqrt(d2) / pullRadius;
-                const tangent = dx * cosT + dy * (-sinT);
-                alpha += tangent * pullStrength * falloff;
-              }
             }
 
             b.omega += alpha * h;
@@ -964,18 +1018,42 @@
         }
         octx.stroke();
 
-        // Bright bob heads on top of the strings.
-        for (const b of bobs) {
+        // Bright bob heads on top of the strings. Held bobs (and bobs
+        // recently released) get a brighter, slightly larger head so the
+        // gesture reads clearly. The release flash decays linearly.
+        const nowMs = performance.now();
+        const heldSetDraw = held.length > 0 ? new Set(held) : null;
+        for (let i = 0; i < bobs.length; i += 1) {
+          const b = bobs[i];
           if (b.lx === null) continue;
           const hue = (palette.hMin + (internalT * 18 + hueShift + b.hueOff) % palette.hRange + 360) % 360;
-          octx.fillStyle = `hsla(${hue}, ${palette.sat}, 76%, 0.95)`;
+          let radius = 1.6 * dpr;
+          let lit = 76;
+          let alpha = 0.95;
+          if (heldSetDraw && heldSetDraw.has(i)) {
+            radius = 2.6 * dpr;
+            lit = 88;
+          } else {
+            const flashAt = flashUntil.get(i);
+            if (flashAt) {
+              const remain = (flashAt - nowMs) / FLASH_DURATION_MS;
+              if (remain > 0) {
+                radius = (1.6 + 1.6 * remain) * dpr;
+                lit = 76 + 14 * remain;
+                alpha = 0.95;
+              } else {
+                flashUntil.delete(i);
+              }
+            }
+          }
+          octx.fillStyle = `hsla(${hue}, ${palette.sat}, ${lit}%, ${alpha})`;
           octx.beginPath();
-          octx.arc(b.lx, b.ly, 1.6 * dpr, 0, Math.PI * 2);
+          octx.arc(b.lx, b.ly, radius, 0, Math.PI * 2);
           octx.fill();
         }
 
+        drawHeldFilaments();
         drawPointerGlow();
-        drawBurstFlash();
 
         hueShift = (hueShift + 0.08) % 360;
         frame += 1;
@@ -1144,61 +1222,74 @@
 
       function updatePointerFromEvent(event) {
         const rect = canvas.getBoundingClientRect();
-        pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
-        pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        const nx = (event.clientX - rect.left) * (canvas.width / rect.width);
+        const ny = (event.clientY - rect.top) * (canvas.height / rect.height);
+        // Smooth cursor velocity (exponential moving average) so a flick
+        // release reads as a flick and a slow release reads as gentle.
+        const now = performance.now();
+        const dt = Math.max(0.001, (now - (pointer._lastT || now)) / 1000);
+        const ivx = (nx - pointer.x) / dt;
+        const ivy = (ny - pointer.y) / dt;
+        const a = 0.35;
+        pointer.vx = pointer.vx * (1 - a) + ivx * a;
+        pointer.vy = pointer.vy * (1 - a) + ivy * a;
+        pointer._lastT = now;
+        pointer.prevX = pointer.x;
+        pointer.prevY = pointer.y;
+        pointer.x = nx;
+        pointer.y = ny;
       }
 
-      function triggerBurst() {
-        if (!pointer.pressedAt) return;
-        const hold = Math.min(BURST_MAX_HOLD_MS, performance.now() - pointer.pressedAt);
-        const charge = hold / BURST_MAX_HOLD_MS;
-        if (charge < 0.05) return;
+      // Grab the closest bobs to the cursor. We rank by the distance from
+      // the cursor to each bob's *current* rendered position (b.lx, b.ly),
+      // not the pivot — so what you grab is what you see. Capped at
+      // MAX_GRABBED so a click in a dense region doesn't seize the whole
+      // field.
+      function grabNearbyBobs() {
+        held.length = 0;
+        const radius = GRAB_RADIUS_PX * dpr;
+        const radiusSq = radius * radius;
+        const candidates = [];
+        for (let i = 0; i < bobs.length; i += 1) {
+          const b = bobs[i];
+          if (b.lx === null) continue;
+          const dx = b.lx - pointer.x;
+          const dy = b.ly - pointer.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < radiusSq) candidates.push({ i, d2 });
+        }
+        candidates.sort((a, b) => a.d2 - b.d2);
+        const limit = Math.min(MAX_GRABBED, candidates.length);
+        for (let k = 0; k < limit; k += 1) held.push(candidates[k].i);
+      }
 
-        const palette = currentPalette();
-        const radius = (200 + charge * 360) * dpr;
-        burst.active = true;
-        burst.x = pointer.x;
-        burst.y = pointer.y;
-        burst.startedAt = performance.now();
-        burst.radius = radius;
-        burst.hue = (palette.hMin + hueShift) % 360;
-
-        // Radial impulse on each bob's angular velocity. The outward
-        // direction is projected onto the bob's swing tangent
-        // (cos theta, -sin theta) to turn it into a torque. Closer bobs get
-        // more kick. The per-bob impulse is capped relative to sqrt(g/L) so
-        // even a max-charge burst lands the bob below the over-spin
-        // threshold — it swings violently, maybe loops once, but the brake
-        // catches anything beyond and the chapter character reasserts.
+      // Release all held bobs. Each bob's angular velocity has already been
+      // set during the drive step (from d(theta)/dt), so we just flash them
+      // and let physics take over.
+      function releaseHeld() {
+        if (held.length === 0) return;
+        const nowMs = performance.now();
         const ch = currentChapter();
         const gBase = ch.gravity * 32.0;
-        const radiusSq = radius * radius;
-        for (const b of bobs) {
-          const sinT = Math.sin(b.theta);
-          const cosT = Math.cos(b.theta);
-          const bx = b.px + b.L * sinT;
-          const by = b.py + b.L * cosT;
-          const dx = bx - burst.x;
-          const dy = by - burst.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 > radiusSq || d2 < 0.01) continue;
-          const d = Math.sqrt(d2);
-          const falloff = 1 - d / radius;
-          const outX = dx / d;
-          const outY = dy / d;
-          const tangent = outX * cosT + outY * (-sinT);
-
+        for (const idx of held) {
+          const b = bobs[idx];
+          if (!b) continue;
+          // Cap omega to the over-spin threshold so a violent flick still
+          // produces a memorable swing but not permanent rotation.
           const omegaNatural = Math.sqrt(gBase / b.L);
-          const maxKick = 1.8 * omegaNatural;
-          const kick = tangent * maxKick * falloff * charge;
-          b.omega += kick;
+          const cap = 2.4 * omegaNatural;
+          if (b.omega > cap)  b.omega = cap;
+          if (b.omega < -cap) b.omega = -cap;
+          flashUntil.set(idx, nowMs + FLASH_DURATION_MS);
         }
+        held.length = 0;
       }
 
       canvas.addEventListener("mousedown", (event) => {
         pointer.active = true;
         pointer.pressedAt = performance.now();
         updatePointerFromEvent(event);
+        grabNearbyBobs();
       });
 
       canvas.addEventListener("mousemove", (event) => {
@@ -1206,13 +1297,13 @@
       });
 
       window.addEventListener("mouseup", () => {
-        if (pointer.active) triggerBurst();
+        releaseHeld();
         pointer.active = false;
         pointer.pressedAt = 0;
       });
 
       canvas.addEventListener("mouseleave", () => {
-        if (pointer.active) triggerBurst();
+        releaseHeld();
         pointer.active = false;
         pointer.pressedAt = 0;
       });
@@ -1221,6 +1312,7 @@
         pointer.active = true;
         pointer.pressedAt = performance.now();
         updatePointerFromEvent(event.touches[0]);
+        grabNearbyBobs();
         event.preventDefault();
       }, { passive: false });
 
@@ -1232,7 +1324,7 @@
       }, { passive: false });
 
       window.addEventListener("touchend", () => {
-        if (pointer.active) triggerBurst();
+        releaseHeld();
         pointer.active = false;
         pointer.pressedAt = 0;
       });
