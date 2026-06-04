@@ -21,7 +21,7 @@ python -m http.server 8000
 2. **Bloom** — Ocean, each stroke spreads outward as it ages, like a flower opening in slow water.
 3. **Vortex** — Aurora, tight high-frequency swirls. Strokes braid around invisible eddies.
 4. **Plume** — Fire, buoyancy added. Whatever you paint rises in slow columns of warm colour.
-5. **Dissolve** — Forest, short-lived particles, rapid fade. Wisps appear and vanish in the same breath.
+5. **Tideline** — Forest, the cursor stops painting and starts gathering. Slow drifting ink appears on its own across the canvas; move the cursor and the ambient ink follows you home. A quieter verb for the ending.
 
 ## Controls
 
@@ -40,13 +40,17 @@ The piece is designed for desktop, but it adapts:
 - The secondary controls collapse into a **Settings** tray that slides up from the bottom on small screens.
 - The interaction works the same with touch: drag a finger to paint, tap for a puff.
 
-## Mouse interaction: paint, puff, watch
+## Mouse interaction: paint, puff, gather
+
+Four of the five chapters are **paint mode**:
 
 - **Hover (no click)** — a soft cursor glow follows your pointer in the current "next stroke" colour. No ink is added.
 - **Hold and drag** — paints ink along the cursor path. Each stroke is colour-coherent (locked to the cycling hue at the moment you press); the next stroke will be a different colour.
 - **Tap (quick click, no movement)** — emits a radial burst of ink particles outward at the cursor.
 
 The colour cycle is per-chapter and tied to wall-clock time, so two strokes a few seconds apart will be different colours. Paint several quick strokes in succession and the canvas builds up a multi-coloured ink-cloud where the strokes mingle.
+
+The final chapter, **Tideline**, is **gather mode**: the cursor stops painting. Ambient ink appears on its own across the canvas; hovering exerts a gentle gravitational pull on nearby particles, and holding pulls harder. Tap still drops a punctuating burst. The work is *with* the system, not *into* it.
 
 ## How it works
 
@@ -69,7 +73,19 @@ A multiplicative fade is applied to the whole image buffer at the start of each 
 
 ### Stroke colour
 
-A wall-clock-driven cycle continuously walks through the chapter's palette hue range over `colorCycleSec` seconds. When the user presses LMB, the current hue is *locked* so a single drag is colour-coherent even as the cycle continues. Release unlocks. The next press picks up wherever the cycle is now, so consecutive strokes are reliably different colours — what gives the piece its multi-coloured ink-cloud character.
+A wall-clock-driven cycle continuously walks through the chapter's palette hue range over `colorCycleSec` seconds. When the user presses LMB, the current hue is *locked* so a single drag is colour-coherent even as the cycle continues. Release unlocks. The next press picks up wherever the cycle is now, so consecutive strokes are reliably different colours.
+
+### Colour mixing
+
+A low-resolution "colour field" grid (~18 px per cell) accumulates the average hue at each location, encoded as circular-mean coordinates so the hue wheel's wrap-around handles correctly. Each particle samples this field as it moves and drifts its own hue slowly toward the local average — so where two different-coloured strokes meet, the particles at the intersection take on a blended hue rather than just overlaying as separate colours. The field also fades over time so old colour opinions decay back to neutral.
+
+### Crystallization (memory)
+
+Settled particles — past mid-life and moving slowly enough — have a small per-frame chance to *crystallize*: they stop moving, fade their current colour into a permanent **dust layer**, and die. The dust layer is a separate Float32 RGB buffer that fades much more slowly than the live ink (over tens of seconds, configurable per chapter), so it builds up over a session into a constellation of where strokes settled — a soft record of the gestures you've made. Every session leaves a distinct dust signature.
+
+### Cursor modes
+
+Most chapters use **paint** mode (the default): drag spawns ink along the cursor path. The final chapter **Tideline** uses **gather** mode: the cursor doesn't add new ink, but ambient ink spawns automatically across the canvas at a slow rate, and the cursor exerts a gravitational pull on nearby particles. The piece ends with a different verb than it begins.
 
 ### Two-canvas architecture
 

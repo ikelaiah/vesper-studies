@@ -549,7 +549,23 @@
           litBase: 60,          // base lightness % for new particles
           fadeAlpha: 0.92,      // per-frame multiplicative fade of the canvas
           tapBurst: 220,        // particles emitted per tap
-          tapVelocity: 220      // outward velocity per tap particle (px/sec)
+          tapVelocity: 220,     // outward velocity per tap particle (px/sec)
+          // Particle-particle attraction: nearby particles pull toward
+          // each other within attractRadius, producing filamentary
+          // structure as ink clumps along the field's stretching axes.
+          attraction: 18,       // attractive force coefficient
+          attractRadius: 14,    // radius in px (before dpr) for the neighbour search
+          // Crystallization: settled (slow) old particles have a chance
+          // each frame to "crystallize" — stop moving, fade into a
+          // permanent dust layer that records where the strokes settled.
+          crystallizeChance: 0.05,  // per-eligible-frame probability
+          crystallizeMinAge: 0.55,  // must be at least this fraction through life
+          crystallizeMaxSpeed: 30,  // must be moving slower than this (px/sec, pre-dpr)
+          dustFadePerSec: 0.05,     // dust layer fades to ~e^-0.05 per second
+          dustAlpha: 0.35,          // brightness of each crystallized splat
+          // Color mixing: each particle samples the local "ink colour
+          // field" and drifts its hue toward the local average.
+          colorMix: 0.06            // 0 = no mixing, ~0.1 = strong mixing
         },
         {
           kicker: "Chapter 1",
@@ -574,7 +590,15 @@
           fadeAlpha: 0.94,
           tapBurst: 280,
           tapVelocity: 180,
-          radialDrift: 28        // outward push per particle from spawn point
+          radialDrift: 28,       // outward push per particle from spawn point
+          attraction: 10,        // light clumping — Bloom is about spreading, not pulling
+          attractRadius: 16,
+          crystallizeChance: 0.04,
+          crystallizeMinAge: 0.6,
+          crystallizeMaxSpeed: 28,
+          dustFadePerSec: 0.04,
+          dustAlpha: 0.42,       // stronger dust — Bloom leaves bright flowers
+          colorMix: 0.08         // strong mixing — petals share colour
         },
         {
           kicker: "Chapter 2",
@@ -598,7 +622,15 @@
           litBase: 60,
           fadeAlpha: 0.92,
           tapBurst: 240,
-          tapVelocity: 240
+          tapVelocity: 240,
+          attraction: 28,        // strong clumping — Vortex makes thick braided filaments
+          attractRadius: 12,
+          crystallizeChance: 0.02,  // less crystallization — Vortex is restless
+          crystallizeMinAge: 0.65,
+          crystallizeMaxSpeed: 22,
+          dustFadePerSec: 0.07,
+          dustAlpha: 0.28,
+          colorMix: 0.12         // strong mixing — eddies blur colours together
         },
         {
           kicker: "Chapter 3",
@@ -622,31 +654,55 @@
           litBase: 64,
           fadeAlpha: 0.93,
           tapBurst: 260,
-          tapVelocity: 160
+          tapVelocity: 160,
+          attraction: 22,        // moderate clumping for column structure
+          attractRadius: 14,
+          crystallizeChance: 0.06,  // ash settles at the base of columns
+          crystallizeMinAge: 0.5,
+          crystallizeMaxSpeed: 35,
+          dustFadePerSec: 0.06,
+          dustAlpha: 0.48,
+          colorMix: 0.05         // warm tones stay distinct
         },
         {
           kicker: "Ending",
-          title: "Dissolve",
-          text: "The water forgets quickly. Each stroke appears and fades in the same breath — a wisp, then nothing. Watch it disappear.",
+          title: "Tideline",
+          text: "The ink paints itself. Slow drifting clouds appear across the water on their own; your cursor doesn't add — it gathers. Move slowly and the ambient ink follows you home.",
           palette: "Forest",
-          noiseScale: 0.0055,
-          noiseSpeed: 0.22,
-          flowStrength: 70,
-          buoyancy: -10,         // slight downward drift — settling
-          spawnPerSecond: 1100,
-          spawnSpread: 8,
-          spawnVelInherit: 0.55,
-          dragSwirl: 70,
-          lifetimeMin: 1.0,
-          lifetimeMax: 2.2,
-          particleSize: 4.2,
-          colorCycleSec: 9.0,
-          colorSpread: 35,
-          satBase: 88,
-          litBase: 58,
-          fadeAlpha: 0.86,       // strong canvas fade — wipes quickly
-          tapBurst: 180,
-          tapVelocity: 200
+          cursorMode: "gather",  // hover/drag = attract, not paint
+          noiseScale: 0.0042,
+          noiseSpeed: 0.12,
+          flowStrength: 45,
+          buoyancy: 0,
+          // Painting from cursor is disabled in gather mode; ambient
+          // spawning is what fills the canvas instead.
+          spawnPerSecond: 0,
+          ambientSpawnPerSecond: 280,   // particles per sec drifting in from nowhere
+          spawnSpread: 12,
+          spawnVelInherit: 0,
+          dragSwirl: 35,
+          lifetimeMin: 5.5,
+          lifetimeMax: 9.0,
+          particleSize: 4.4,
+          colorCycleSec: 14.0,   // slow colour change — chapter is patient
+          colorSpread: 50,
+          satBase: 80,
+          litBase: 62,
+          fadeAlpha: 0.95,
+          tapBurst: 220,
+          tapVelocity: 180,
+          attraction: 14,
+          attractRadius: 18,
+          // Cursor gravity (gather mode): how strongly the cursor pulls
+          // nearby ink toward itself.
+          cursorPull: 240,            // px/sec² of pull at the cursor
+          cursorPullRadius: 180,      // radius in px (before dpr)
+          crystallizeChance: 0.04,
+          crystallizeMinAge: 0.5,
+          crystallizeMaxSpeed: 40,
+          dustFadePerSec: 0.025,      // dust persists longest here
+          dustAlpha: 0.55,            // brightest dust — the chapter is about memory
+          colorMix: 0.10              // strong mixing in the slow drift
         }
       ];
 
@@ -684,6 +740,18 @@
       // Spawning accumulator: chapters request fractional particles per
       // frame, so we accumulate and emit whole ones.
       let spawnAccum = 0;
+
+      // Spatial hash grid for particle-particle attraction. Cell size =
+      // chapter.attractRadius * dpr (so each particle only needs to scan
+      // its own cell + 8 neighbours to find every particle within range).
+      // Rebuilt fresh each frame from current positions. Intrusive linked
+      // list: gridHead[cell] is the index of the first particle in that
+      // cell (or -1 if empty); gridNextP[particle] chains to the next.
+      let gridCellPx = 1;
+      let gridCols = 1;
+      let gridRows = 1;
+      let gridHead = new Int32Array(1);
+      const gridNextP = new Int32Array(MAX_PARTICLES);
       // Tap burst queue: when a tap fires we want to emit a burst over
       // a short window rather than all in one frame (avoids saturating
       // a single pixel). Stored as { x, y, remaining, hue, until }.
@@ -715,6 +783,31 @@
       // canvas pixel resolution.
       let imageBuf = null;     // raw RGBA Uint8ClampedArray
       let imageData = null;    // wrapping ImageData
+
+      // Dust buffer: a separate float-RGB layer that holds crystallized
+      // particle deposits. It fades much more slowly than the live ink,
+      // so it builds up over a session into a record of where strokes
+      // settled. Composited additively into the output each frame.
+      // Stored as a Float32Array (3 floats per pixel, no alpha needed)
+      // so repeated additions don't quantize away.
+      let dustBuf = null;          // Float32Array, length = canvas.width * canvas.height * 3
+      let dustWidth = 0, dustHeight = 0;
+
+      // Color field: a low-resolution grid that holds the average ink
+      // colour at each location. Particles sample this on splat and
+      // drift their hue toward the local average — so two different-
+      // coloured strokes that meet will blend at the intersection
+      // rather than overlay as separate colours.
+      // Stored as Float32Array of (cos2h, sin2h, weight) per cell where
+      // we use 2*hue angles so antipodal hues (red ↔ cyan) don't average
+      // to white through the origin. Length = colorCols * colorRows * 3.
+      let colorField = null;
+      let colorCols = 0, colorRows = 0;
+      const COLOR_CELL_PX = 18;    // px per colour-field cell (before dpr)
+      let colorCellPx = 1;
+      // Fade applied each frame so the colour field eventually relaxes
+      // back toward "no opinion" once no ink occupies a region.
+      const COLOR_FADE_PER_SEC = 0.25;
 
       // Pre-rendered soft sprite atlas (small grayscale Gaussian patch).
       // We sample this per particle and add its values × particle colour
@@ -863,9 +956,16 @@
         if (canvas.width === 0 || canvas.height === 0) return;
         imageData = ctx.createImageData(canvas.width, canvas.height);
         imageBuf = imageData.data;
-        // Initialise alphas to 255 (we always write opaque pixels and
-        // composite via blending; this avoids per-pixel alpha writes).
         for (let i = 3; i < imageBuf.length; i += 4) imageBuf[i] = 255;
+        // Dust buffer sized to canvas pixels (3 floats per pixel).
+        dustWidth = canvas.width;
+        dustHeight = canvas.height;
+        dustBuf = new Float32Array(dustWidth * dustHeight * 3);
+        // Color field sized at chapter-cell scale.
+        colorCellPx = Math.max(4, COLOR_CELL_PX * dpr);
+        colorCols = Math.max(1, Math.ceil(canvas.width / colorCellPx));
+        colorRows = Math.max(1, Math.ceil(canvas.height / colorCellPx));
+        colorField = new Float32Array(colorCols * colorRows * 3);
       }
 
       function loadChapter() {
@@ -875,6 +975,16 @@
         tapBursts.length = 0;
         lockedHue = null;
         fillBackground();
+        if (dustBuf) dustBuf.fill(0);
+        if (colorField) colorField.fill(0);
+        // Image buffer is wiped by fillBackground via canvas, but our
+        // shadow buffer still has stale data. Clear it.
+        if (imageBuf) {
+          for (let i = 0; i < imageBuf.length; i += 4) {
+            imageBuf[i] = 0; imageBuf[i + 1] = 0; imageBuf[i + 2] = 0;
+            imageBuf[i + 3] = 255;
+          }
+        }
       }
 
       // -- HSL → RGB (compact inline) -------------------------------------
@@ -1040,6 +1150,85 @@
         }
       }
 
+      // Splat a "crystallized" particle into the dust buffer. Dust is a
+      // float-RGB layer that fades much more slowly than live ink, so it
+      // builds up over a session into a record of where strokes settled.
+      function splatDust(x, y, r, g, b, alpha) {
+        const W = dustWidth;
+        const H = dustHeight;
+        const half = (SPRITE_SIZE - 1) / 2;
+        const sX0 = Math.floor(x - half);
+        const sY0 = Math.floor(y - half);
+        const ix0 = Math.max(0, sX0);
+        const iy0 = Math.max(0, sY0);
+        const ix1 = Math.min(W, sX0 + SPRITE_SIZE);
+        const iy1 = Math.min(H, sY0 + SPRITE_SIZE);
+        if (ix0 >= ix1 || iy0 >= iy1) return;
+        const af = alpha / 255;
+        for (let yy = iy0; yy < iy1; yy += 1) {
+          const sy = yy - sY0;
+          const srcRow = sy * SPRITE_SIZE;
+          const dstRowBase = yy * W * 3;
+          for (let xx = ix0; xx < ix1; xx += 1) {
+            const sx = xx - sX0;
+            const sw = spriteAlpha[srcRow + sx] * af / 255;
+            if (sw <= 0) continue;
+            const idx = dstRowBase + xx * 3;
+            dustBuf[idx]     += r * sw;
+            dustBuf[idx + 1] += g * sw;
+            dustBuf[idx + 2] += b * sw;
+          }
+        }
+      }
+
+      // Sample the colour field at a canvas-pixel location. Returns
+      // [hue (degrees), weight] — weight=0 means "no opinion".
+      // The field stores (Σ cos(h_rad)·w, Σ sin(h_rad)·w, Σ w), so taking
+      // atan2 of the first two recovers the circular-mean hue.
+      function sampleColorField(x, y) {
+        const cx = Math.min(colorCols - 1, Math.max(0, (x / colorCellPx) | 0));
+        const cy = Math.min(colorRows - 1, Math.max(0, (y / colorCellPx) | 0));
+        const idx = (cy * colorCols + cx) * 3;
+        const c = colorField[idx];
+        const s = colorField[idx + 1];
+        const w = colorField[idx + 2];
+        if (w < 0.001) return [-1, 0];
+        let hue = Math.atan2(s, c) * 180 / Math.PI;
+        if (hue < 0) hue += 360;
+        return [hue, w];
+      }
+
+      // Accumulate a particle's hue contribution into the colour field.
+      function addToColorField(x, y, hue, weight) {
+        const cx = Math.min(colorCols - 1, Math.max(0, (x / colorCellPx) | 0));
+        const cy = Math.min(colorRows - 1, Math.max(0, (y / colorCellPx) | 0));
+        const idx = (cy * colorCols + cx) * 3;
+        const rad = hue * Math.PI / 180;
+        colorField[idx]     += Math.cos(rad) * weight;
+        colorField[idx + 1] += Math.sin(rad) * weight;
+        colorField[idx + 2] += weight;
+      }
+
+      // Rebuild the spatial hash grid for this frame. Cell size is set
+      // to the chapter's attractRadius (in canvas px) so a 3×3 cell
+      // neighbour scan covers every particle within attractRadius of any
+      // query particle. This makes attraction O(N·k) instead of O(N²).
+      function rebuildParticleGrid(cellPx) {
+        gridCellPx = Math.max(4, cellPx);
+        gridCols = Math.max(1, Math.ceil(canvas.width  / gridCellPx));
+        gridRows = Math.max(1, Math.ceil(canvas.height / gridCellPx));
+        const total = gridCols * gridRows;
+        if (gridHead.length < total) gridHead = new Int32Array(total);
+        for (let i = 0; i < total; i += 1) gridHead[i] = -1;
+        for (let i = 0; i < activeCount; i += 1) {
+          const cx = Math.min(gridCols - 1, Math.max(0, (px[i] / gridCellPx) | 0));
+          const cy = Math.min(gridRows - 1, Math.max(0, (py[i] / gridCellPx) | 0));
+          const cell = cy * gridCols + cx;
+          gridNextP[i] = gridHead[cell];
+          gridHead[cell] = i;
+        }
+      }
+
       function tickAndRender(dt) {
         const ch = currentChapter();
         const palette = currentPalette();
@@ -1050,19 +1239,50 @@
         const noiseScale = ch.noiseScale / dpr;
         const buoyancy = ch.buoyancy * dpr;
         const radialDrift = (ch.radialDrift || 0) * dpr;
+        const attraction = (ch.attraction || 0);
+        const attractR = (ch.attractRadius || 14) * dpr;
+        const attractR2 = attractR * attractR;
+        const gather = ch.cursorMode === "gather";
+        const cursorPull = (ch.cursorPull || 0) * dpr;
+        const cursorPullR = (ch.cursorPullRadius || 120) * dpr;
+        const cursorPullR2 = cursorPullR * cursorPullR;
+        const colorMixK = (ch.colorMix || 0);
+        const crystChance = (ch.crystallizeChance || 0);
+        const crystMinAge = (ch.crystallizeMinAge || 0.6);
+        const crystMaxSpeed = (ch.crystallizeMaxSpeed || 30) * dpr;
+        const crystMaxSpeed2 = crystMaxSpeed * crystMaxSpeed;
+        const dustAlpha = (ch.dustAlpha || 0.3);
+        const dustFadeF = Math.exp(-(ch.dustFadePerSec || 0.05) * dt);
+        const colorFadeF = Math.exp(-COLOR_FADE_PER_SEC * dt);
 
-        // Fade canvas (multiplicative). This produces the trail/fade look
-        // and clears stale particles. We modulate every RGB byte directly
-        // in the image buffer — cheaper than a fillRect over an image we're
-        // about to putImageData over anyway.
+        // Rebuild the spatial hash for this frame's particle positions.
+        if ((attraction > 0 || gather) && activeCount > 0) {
+          rebuildParticleGrid(attractR);
+        }
+
+        // Fade the live-ink image buffer (the multiplicative trail fade
+        // for the bright glowing layer).
         const fadeFix = Math.pow(ch.fadeAlpha, dt * 60);
-        // Convert to 0..256 fixed point.
         const fadeQ = Math.max(0, Math.min(256, Math.floor(fadeFix * 256)));
         for (let i = 0, n = imageBuf.length; i < n; i += 4) {
           imageBuf[i]     = (imageBuf[i]     * fadeQ) >> 8;
           imageBuf[i + 1] = (imageBuf[i + 1] * fadeQ) >> 8;
           imageBuf[i + 2] = (imageBuf[i + 2] * fadeQ) >> 8;
-          // alpha stays 255
+        }
+
+        // Fade the dust layer at its (much slower) rate.
+        if (dustBuf) {
+          for (let i = 0, n = dustBuf.length; i < n; i += 1) {
+            dustBuf[i] *= dustFadeF;
+          }
+        }
+
+        // Fade the colour field so old colour opinions decay back toward
+        // neutral once no ink sustains them.
+        if (colorField) {
+          for (let i = 0, n = colorField.length; i < n; i += 1) {
+            colorField[i] *= colorFadeF;
+          }
         }
 
         // Integrate particles + splat.
@@ -1084,49 +1304,176 @@
             ay += (rdy / rd) * radialDrift;
           }
 
-          // Semi-implicit integration: curl-noise replaces velocity (the
-          // particle locally rides the flow). We blend the noise velocity
-          // with the inherited stroke velocity, weighted by age — fresh
-          // particles still carry the stroke's punch, older ones surrender
-          // to the field.
-          const ageT = 1 - plife[i] / pmaxlife[i];  // 0=new, 1=dying
-          const blend = Math.min(1, ageT * 1.6);    // becomes 100% noise at 62.5% age
+          // Particle-particle attraction.
+          if (attraction > 0) {
+            const cx = Math.min(gridCols - 1, Math.max(0, (px[i] / gridCellPx) | 0));
+            const cy = Math.min(gridRows - 1, Math.max(0, (py[i] / gridCellPx) | 0));
+            const x0 = Math.max(0, cx - 1);
+            const x1 = Math.min(gridCols - 1, cx + 1);
+            const y0 = Math.max(0, cy - 1);
+            const y1 = Math.min(gridRows - 1, cy + 1);
+            let pullX = 0, pullY = 0;
+            for (let gy = y0; gy <= y1; gy += 1) {
+              for (let gx = x0; gx <= x1; gx += 1) {
+                let j = gridHead[gy * gridCols + gx];
+                while (j !== -1) {
+                  if (j !== i) {
+                    const dx = px[j] - px[i];
+                    const dy = py[j] - py[i];
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 < attractR2 && d2 > 0.1) {
+                      const inv = 1 / Math.sqrt(d2);
+                      const ndx = dx * inv;
+                      const ndy = dy * inv;
+                      const d = 1 / inv;
+                      const falloff = 1 - d / attractR;
+                      const force = falloff - 0.45 * Math.exp(-d * 0.4);
+                      pullX += ndx * force;
+                      pullY += ndy * force;
+                    }
+                  }
+                  j = gridNextP[j];
+                }
+              }
+            }
+            ax += pullX * attraction;
+            ay += pullY * attraction;
+          }
+
+          // Cursor pull (gather chapters): cursor attracts nearby ink
+          // toward itself, like a slow magnet. Active when cursor is
+          // over the canvas; stronger when held.
+          if (gather && pointer.over && cursorPull > 0) {
+            const cdx = pointer.x - px[i];
+            const cdy = pointer.y - py[i];
+            const cd2 = cdx * cdx + cdy * cdy;
+            if (cd2 < cursorPullR2 && cd2 > 1) {
+              const cd = Math.sqrt(cd2);
+              const falloff = 1 - cd / cursorPullR;
+              const k = pointer.active ? 1.7 : 1.0;
+              ax += (cdx / cd) * cursorPull * falloff * k;
+              ay += (cdy / cd) * cursorPull * falloff * k;
+            }
+          }
+
+          // Semi-implicit integration with age-weighted blending.
+          const ageT = 1 - plife[i] / pmaxlife[i];
+          const blend = Math.min(1, ageT * 1.6);
           vx[i] = vx[i] * (1 - blend) + ax * blend;
           vy[i] = vy[i] * (1 - blend) + ay * blend;
 
           px[i] += vx[i] * dt;
           py[i] += vy[i] * dt;
 
-          // Kill particles that drift far off-canvas to free pool slots.
+          // Kill off-canvas particles.
           if (px[i] < -20 || px[i] > W + 20 || py[i] < -20 || py[i] > H + 20) {
             killParticle(i); continue;
           }
 
+          // Colour mixing: drift this particle's hue toward the local
+          // average held in the colour field. Particle hue is stored as
+          // degrees; we use circular-mean to handle the wrap-around.
+          if (colorMixK > 0) {
+            const sample = sampleColorField(px[i], py[i]);
+            const localHue = sample[0];
+            const localW = sample[1];
+            if (localW > 0.05) {
+              // Shortest-arc step from current hue to local mean.
+              let delta = localHue - phue[i];
+              while (delta > 180) delta -= 360;
+              while (delta < -180) delta += 360;
+              // Mix scaled by colorMixK × dt × local weight.
+              const mixT = Math.min(0.5, colorMixK * dt * 60 * Math.min(1, localW));
+              phue[i] += delta * mixT;
+              if (phue[i] < 0) phue[i] += 360;
+              else if (phue[i] >= 360) phue[i] -= 360;
+            }
+          }
+
           // Splat. Brightness eases in then out over lifetime.
           const lifeT = plife[i] / pmaxlife[i];
-          // Bell-curve alpha: peak at ~70% of life, fade to 0 at end.
           let alpha = lifeT * (1 - lifeT) * 4;
           alpha = Math.max(0, Math.min(1, alpha)) * 0.9 * glowMultiplier;
           if (alpha < 0.01) { i += 1; continue; }
           const rgb = hslToRgb(phue[i], psat[i], plit[i]);
-          // Splat scaled radius based on chapter particleSize and life.
-          // (We don't actually vary sprite size — the sprite is fixed.
-          // To vary, we'd need pre-rendered atlases per size. The Gaussian
-          // sprite already looks soft enough that fixed size reads well.)
           const a256 = Math.floor(alpha * 255);
           splatParticle(px[i], py[i], rgb[0], rgb[1], rgb[2], a256);
+
+          // Contribute this particle's hue to the colour field (weighted
+          // by its current splat alpha, so bright particles dominate).
+          if (colorMixK > 0) addToColorField(px[i], py[i], phue[i], alpha);
+
+          // Crystallization: if this particle is past mid-life, moving
+          // slowly enough, roll a per-frame probability to "settle" it
+          // permanently into the dust layer. Crystallized particles
+          // contribute a single splat to dust and then die.
+          if (crystChance > 0 && ageT > crystMinAge) {
+            const vMag2 = vx[i] * vx[i] + vy[i] * vy[i];
+            if (vMag2 < crystMaxSpeed2) {
+              // Convert per-frame probability to per-second so dt scaling works.
+              const p = 1 - Math.pow(1 - crystChance, dt * 60);
+              if (Math.random() < p) {
+                splatDust(px[i], py[i], rgb[0], rgb[1], rgb[2],
+                          Math.floor(dustAlpha * 255));
+                killParticle(i);
+                continue;
+              }
+            }
+          }
 
           i += 1;
         }
 
-        // Drag-spawn ink along the cursor stroke if active.
-        if (pointer.active && pointer.over) {
+        // Composite dust into the image buffer additively. Dust is fixed
+        // permanent-feeling brightness on top of the fading live ink.
+        if (dustBuf) {
+          for (let p = 0, q = 0, n = imageBuf.length; p < n; p += 4, q += 3) {
+            const r = imageBuf[p]     + (dustBuf[q]     | 0);
+            const g = imageBuf[p + 1] + (dustBuf[q + 1] | 0);
+            const b = imageBuf[p + 2] + (dustBuf[q + 2] | 0);
+            imageBuf[p]     = r > 255 ? 255 : r;
+            imageBuf[p + 1] = g > 255 ? 255 : g;
+            imageBuf[p + 2] = b > 255 ? 255 : b;
+          }
+        }
+
+        // Cursor stroke spawn (paint mode) or ambient spawn (gather mode).
+        if (gather) {
+          if (ch.ambientSpawnPerSecond > 0) {
+            emitAmbient(ch, dt);
+          }
+        } else if (pointer.active && pointer.over) {
           emitAlongStroke(pointer.prevX, pointer.prevY, pointer.x, pointer.y,
                           ch.spawnPerSecond, dt, ch);
         }
 
         // Put the buffer onto the canvas.
         ctx.putImageData(imageData, 0, 0);
+      }
+
+      // Ambient spawn: drop fresh ink at random points across the canvas,
+      // at the chapter's ambient rate. Used by gather-mode chapters where
+      // the cursor doesn't paint but only herds existing ink.
+      function emitAmbient(ch, dt) {
+        spawnAccum += ch.ambientSpawnPerSecond * dt;
+        const want = Math.floor(spawnAccum);
+        spawnAccum -= want;
+        if (want === 0) return;
+        const W = canvas.width, H = canvas.height;
+        const baseHue = cyclingHue();
+        const sat = ch.satBase / 100;
+        const lit = ch.litBase / 100;
+        for (let k = 0; k < want; k += 1) {
+          const jx = Math.random() * W;
+          const jy = Math.random() * H;
+          const swirlAng = Math.random() * Math.PI * 2;
+          const swirlMag = ch.dragSwirl * dpr * (0.3 + Math.random() * 0.7);
+          const ivx = Math.cos(swirlAng) * swirlMag;
+          const ivy = Math.sin(swirlAng) * swirlMag;
+          const hue = (baseHue + (Math.random() - 0.5) * ch.colorSpread + 360) % 360;
+          const life = ch.lifetimeMin + Math.random() * (ch.lifetimeMax - ch.lifetimeMin);
+          spawnParticle(jx, jy, ivx, ivy, hue, sat, lit, life);
+        }
       }
 
       // -- Cursor velocity smoothing ---------------------------------------
