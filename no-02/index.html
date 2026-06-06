@@ -662,6 +662,7 @@
       const GRAB_RADIUS_PX = 110;   // how far around the cursor we grab
       const MAX_GRABBED = 14;       // cap so a click in a dense region doesn't seize the whole field
       const MAX_PLUCK_ANGLE = 1.25; // ~72° — how far we'll let the cursor stretch a bob from rest
+      const GRAB_EASE = 14;         // grab glide rate (per second): how fast a held bob eases toward the cursor
 
       // Released-bob flash: a brief bright pulse on each bob the moment its
       // grip releases, so you can see what you flicked.
@@ -887,12 +888,13 @@
         const SUBSTEPS = 2;
         const h = dtSec / SUBSTEPS;
 
-        // Held bobs: drive theta directly from the cursor offset relative
-        // to the pivot. This is direct manipulation — the bob hangs from
-        // the cursor position (clamped to a maximum stretch angle), rather
-        // than being tugged via a soft torque. omega is set from the
-        // change in theta so when the bob is released it carries the
-        // cursor's instantaneous velocity into its swing.
+        // Held bobs: ease theta toward the cursor offset relative to the
+        // pivot. Rather than snapping the bob onto the cursor instantly,
+        // each substep glides a fraction of the remaining distance toward
+        // the target angle (an exponential approach), so a grab reads as a
+        // smooth pull-in rather than a jump. omega is set from the actual
+        // change in theta so when the bob is released it still carries its
+        // current velocity — including a fast initial glide — into its swing.
         if (held.length > 0) {
           for (const idx of held) {
             const b = bobs[idx];
@@ -906,9 +908,14 @@
             if (target > MAX_PLUCK_ANGLE)  target = MAX_PLUCK_ANGLE;
             if (target < -MAX_PLUCK_ANGLE) target = -MAX_PLUCK_ANGLE;
             const prevTheta = b.theta;
-            b.theta = target;
+            // Frame-rate-independent exponential ease: a fixed fraction of
+            // the gap is closed per unit time, so the glide feels the same
+            // regardless of substep size. GRAB_EASE is the approach rate
+            // (per second); higher = snappier, lower = more languid.
+            const k = 1 - Math.exp(-GRAB_EASE * h);
+            b.theta = prevTheta + (target - prevTheta) * k;
             // omega = d(theta)/dt — gives a flick-release the right energy.
-            if (dtSec > 0.0001) b.omega = (target - prevTheta) / dtSec;
+            if (h > 0.0001) b.omega = (b.theta - prevTheta) / h;
           }
         }
 
